@@ -169,41 +169,6 @@ async function startServer() {
   Object.entries(apiRoutes).forEach(([prefix, targetBase]) => {
     app.use(prefix, async (req, res) => {
         try {
-            let authHeader = req.headers['authorization'] || '';
-            
-            // --- Security: API Key Protection ---
-            // If PROXY_PASSWORD is set, client must send it. Server will swap it for the real API key.
-            const expectedPassword = process.env.PROXY_PASSWORD;
-            
-            if (expectedPassword) {
-                const clientToken = authHeader.replace('Bearer ', '').trim();
-                
-                // Also check x-api-key for Anthropic
-                const xApiKey = req.headers['x-api-key'] || '';
-                const clientKeyToken = typeof xApiKey === 'string' ? xApiKey.trim() : '';
-
-                if (clientToken !== expectedPassword && clientKeyToken !== expectedPassword) {
-                     return res.status(401).json({ error: "Unauthorized: Invalid Proxy Password. Please check your API Key setting in the client." });
-                }
-                
-                // Swap with the real API key from environment variables
-                let realKey = '';
-                if (prefix.includes('openai')) realKey = process.env.OPENAI_API_KEY;
-                if (prefix.includes('gemini')) realKey = process.env.GEMINI_API_KEY;
-                if (prefix.includes('anthropic')) realKey = process.env.ANTHROPIC_API_KEY;
-                if (prefix.includes('xai')) realKey = process.env.XAI_API_KEY;
-                if (prefix.includes('deepseek')) realKey = process.env.DEEPSEEK_API_KEY;
-
-                if (realKey) {
-                    // Update auth headers with the real key
-                    if (prefix.includes('anthropic')) {
-                        req.headers['x-api-key'] = realKey;
-                    } else {
-                        authHeader = `Bearer ${realKey}`;
-                    }
-                }
-            }
-
             const targetUrl = targetBase + req.url;
             
             const proxyHeaders = new Headers();
@@ -214,17 +179,13 @@ async function startServer() {
                 key !== 'referer' &&
                 !key.startsWith('cf-') &&
                 !key.startsWith('x-forwarded-') &&
-                key !== 'x-real-ip' &&
-                key !== 'authorization' // We'll set this manually below if needed
+                key !== 'x-real-ip'
               ) {
                 proxyHeaders.set(key, req.headers[key]);
               }
             }
             
             proxyHeaders.set('Host', new URL(targetBase).hostname);
-            if (authHeader) {
-                proxyHeaders.set('authorization', authHeader);
-            }
 
             const requestInit = {
               method: req.method,

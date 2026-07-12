@@ -1,40 +1,58 @@
 import { useState } from 'react';
-import { Shield, Globe, Lock, Terminal, Search, Plus, ChevronLeft, ChevronRight, Share, Key, Home } from 'lucide-react';
+import { Shield, Globe, Lock, Terminal, Search, Plus, ChevronLeft, ChevronRight, Share, Key, Home, Copy, Check } from 'lucide-react';
 
 const dict = {
   zh: {
     heroTitle: "量子安全代理中转站",
     heroDesc: "完全内嵌的高速隐私代理架构。不再依赖 Cloudflare Worker，直接在此平台上提供绝对隐私保护与深度 API 分流。",
-    feature1Title: "防盗取 API 密钥护盾",
-    feature1Desc: "在服务端配置真实的 API Key，客户端仅需输入 Proxy Password (代理密码)。您的真实密钥永远不会暴露在网络中，彻底杜绝被盗用风险。",
+    feature1Title: "API 直连透传",
+    feature1Desc: "您的 API Key 只需保存在本地客户端中。本站及 Worker 仅负责纯粹的链路加速与路由转发，绝不保存或劫持您的任何密钥。",
     feature2Title: "无痕中转隧道",
     feature2Desc: "目标网站与 API 厂商只能看到来自云端服务器的请求。强制剥离所有追踪请求头，100% 隐藏您的真实 IP。",
     feature3Title: "极速节点直连",
     feature3Desc: "自动将出站请求路由至完全支持大模型的高速海外服务器区域，享受原生般的流畅体验。",
     toolTitle: "主流 API 客户端配置指南 (Chatbox, NextChat 等)",
-    toolDesc: "无需翻墙，在主流客户端中填入以下 Base URL。同时在客户端的 API Key 栏填入您在服务端配置的 PROXY_PASSWORD (代理密码)，即可安全地满速调用大模型：",
+    toolDesc: "无需翻墙，直接在主流客户端中填入以下 Base URL，并在 API Key 处填入您的真实密钥，即可高速调用各家大模型：",
     apiProvider: "服务商",
     apiEndpoint: "接口地址 (Base URL)",
     webProxyDesc: "直接在上方地址栏输入网站 (如 google.com) 或搜索内容，即可在站内高速代理显示并进行完整操作，支持流媒体、多网页与文件下载。",
     alertTarget: "请输入您的目标网址或搜索内容",
-    langToggle: "English"
+    langToggle: "English",
+    dnsTitle: "阿里云/腾讯云域名绑定 Cloudflare Worker 教程",
+    dnsDesc: "为了在 Cloudflare Worker 上绑定国内注册商（如阿里云、腾讯云）的域名，您必须将域名的 DNS 服务器（NS记录）迁移到 Cloudflare：",
+    dnsStep1: "注册并登录 Cloudflare (cloudflare.com)，点击「Add a site」添加您的域名。",
+    dnsStep2: "选择 Free 免费计划。Cloudflare 会分配两个 NS (Name Server) 地址 (例如: ali.ns.cloudflare.com)。",
+    dnsStep3: "登录您的阿里云/腾讯云控制台，找到该域名的「DNS修改」或「修改DNS服务器」选项。",
+    dnsStep4: "将默认的国内 DNS 替换为 Cloudflare 提供的两个 NS 地址。等待生效（通常需要几十分钟）。",
+    dnsStep5: "生效后，在 Cloudflare 的 Workers & Pages -> 您的 Worker -> Settings -> Triggers -> Custom Domains 中添加您的域名即可！",
+    workerDeployTitle: "Cloudflare Worker 一键无痕代理代码",
+    workerDeployDesc: "复制以下代码并部署到 Cloudflare Worker，实现域名下的全能无痕代理（高速网页访问 + API 透明加速转发）。",
   },
   en: {
     heroTitle: "Quantum Secure Proxy",
     heroDesc: "Fully embedded high-speed privacy proxy. Cloudflare Worker is no longer needed. Enjoy absolute privacy and deep API routing right from this platform.",
-    feature1Title: "API Key Theft Shield",
-    feature1Desc: "Configure your real API keys on the server and use a Proxy Password in your clients. Your real keys are never exposed on the network, eliminating the risk of theft.",
+    feature1Title: "Transparent API Passthrough",
+    feature1Desc: "Your API Keys stay safe in your local client. Our server and Worker only act as a high-speed routing tunnel and never store or intercept your keys.",
     feature2Title: "Untraceable Tunnel",
     feature2Desc: "Target APIs only see our cloud server's IP. All tracking headers are stripped, and your real IP is 100% hidden.",
     feature3Title: "Direct High-Speed Nodes",
     feature3Desc: "Automatically routes egress traffic through regions fully supported by AI APIs for a native-like smooth experience.",
     toolTitle: "API Client Configuration Guide (Chatbox, NextChat)",
-    toolDesc: "Configure your AI clients with the following Base URLs. Also enter your PROXY_PASSWORD (configured on the server) in the API Key field of your client to securely proxy your traffic:",
+    toolDesc: "Configure your AI clients with the following Base URLs and use your REAL API Keys. Your traffic will be securely proxied:",
     apiProvider: "Provider",
     apiEndpoint: "Base URL",
     webProxyDesc: "Enter a website (e.g. google.com) or search query in the address bar above to browse directly within this app at high speeds, supporting downloads and multiple pages.",
     alertTarget: "Please enter a target URL or search query",
-    langToggle: "中文"
+    langToggle: "中文",
+    dnsTitle: "Custom Domain Binding for Cloudflare Worker",
+    dnsDesc: "To bind a domain registered in China (e.g. Aliyun) to a Cloudflare Worker, you MUST migrate the domain's Name Servers (NS) to Cloudflare:",
+    dnsStep1: "Log in to Cloudflare (cloudflare.com) and click 'Add a site' to add your domain.",
+    dnsStep2: "Select the Free plan. Cloudflare will assign you two Name Servers (NS) (e.g., ali.ns.cloudflare.com).",
+    dnsStep3: "Log in to your domain registrar (e.g. Aliyun) and find the 'DNS Modification' or 'Change Name Servers' option.",
+    dnsStep4: "Replace the default Chinese NS with the Cloudflare NS. Wait for propagation.",
+    dnsStep5: "Once active, go to Cloudflare Workers & Pages -> your Worker -> Settings -> Triggers -> Custom Domains and add your domain!",
+    workerDeployTitle: "Cloudflare Worker Untraceable Proxy Code",
+    workerDeployDesc: "Copy this code to your Cloudflare Worker for full untraceable proxying (Web browsing + Transparent API Acceleration).",
   }
 };
 
@@ -42,8 +60,159 @@ export default function App() {
   const [lang, setLang] = useState<'zh' | 'en'>('zh');
   const [targetUrl, setTargetUrl] = useState('');
   const [iframeUrl, setIframeUrl] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const t = dict[lang];
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(workerCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy', err);
+    }
+  };
+
+  const workerCode = `/**
+ * Cloudflare Worker - Quantum Secure AI & Web Proxy
+ * 
+ * Includes full web proxying and transparent API acceleration.
+ */
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+
+    // --- 1. Preflight & CORS ---
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': '*',
+        }
+      });
+    }
+
+    // --- 2. API Routing ---
+    let targetUrl = '';
+    let isApi = false;
+    let proxyHeaders = new Headers(request.headers);
+    
+    const apiRoutes = {
+      '/openai': 'https://api.openai.com',
+      '/gemini': 'https://generativelanguage.googleapis.com',
+      '/anthropic': 'https://api.anthropic.com',
+      '/xai': 'https://api.x.ai',
+      '/deepseek': 'https://api.deepseek.com'
+    };
+
+    for (const [prefix, targetBase] of Object.entries(apiRoutes)) {
+      if (url.pathname.startsWith(prefix)) {
+        isApi = true;
+        targetUrl = targetBase + url.pathname.replace(prefix, '') + url.search;
+        break;
+      }
+    }
+
+    // --- 3. Dynamic Full Web Proxy ---
+    if (!isApi) {
+      const pathStr = url.pathname.slice(1);
+      
+      const isUrlOrDomain = (str) => {
+          if (str.startsWith('http://') || str.startsWith('https://')) return true;
+          return /^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}(\\/.*)?$/.test(str) && !str.includes(' ');
+      };
+      
+      const getFullTarget = (str) => {
+          if (str.startsWith('http://') || str.startsWith('https://')) return str;
+          return 'https://' + str;
+      };
+
+      if (isUrlOrDomain(pathStr.split('?')[0])) {
+        targetUrl = getFullTarget(pathStr) + url.search;
+      } else {
+        const referer = request.headers.get('Referer');
+        if (referer) {
+          try {
+            const refUrl = new URL(referer);
+            const refPath = refUrl.pathname.slice(1);
+            if (isUrlOrDomain(refPath)) {
+               const baseTarget = new URL(getFullTarget(refPath));
+               targetUrl = new URL(url.pathname + url.search, baseTarget.origin).toString();
+            }
+          } catch(e) {}
+        }
+      }
+    }
+
+    if (!targetUrl) {
+       return new Response("Proxy active. Append a target URL (e.g., /google.com) or an API path (e.g., /openai/v1/chat/completions).", { status: 200 });
+    }
+
+    // --- 4. Request Construction & Anonymization ---
+    const targetUrlObj = new URL(targetUrl);
+    proxyHeaders.set('Host', targetUrlObj.hostname);
+    
+    if (!isApi) {
+       proxyHeaders.delete('Origin');
+       proxyHeaders.delete('Referer');
+       const cfHeaders = ['cf-connecting-ip', 'cf-ipcountry', 'cf-ray', 'cf-visitor', 'x-forwarded-proto', 'x-forwarded-for', 'x-real-ip', 'true-client-ip'];
+       cfHeaders.forEach(h => proxyHeaders.delete(h));
+    } else {
+       proxyHeaders.delete('x-forwarded-for');
+       proxyHeaders.delete('cf-connecting-ip');
+       proxyHeaders.delete('x-real-ip');
+    }
+
+    const requestInit = {
+      method: request.method,
+      headers: proxyHeaders,
+      redirect: 'manual'
+    };
+    
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      requestInit.body = request.body;
+    }
+
+    try {
+      const response = await fetch(targetUrl, requestInit);
+      let responseHeaders = new Headers(response.headers);
+
+      if (isApi) {
+        responseHeaders.set('Access-Control-Allow-Origin', '*');
+      } else {
+        if ([301, 302, 303, 307, 308].includes(response.status)) {
+            const location = responseHeaders.get('Location');
+            if (location) {
+                if (location.startsWith('http')) {
+                    responseHeaders.set('Location', \`/\${location}\`);
+                } else if (location.startsWith('/')) {
+                    responseHeaders.set('Location', \`/\${targetUrlObj.hostname}\${location}\`);
+                }
+            }
+        }
+        responseHeaders.delete('X-Frame-Options');
+        responseHeaders.delete('Content-Security-Policy');
+        responseHeaders.delete('Content-Security-Policy-Report-Only');
+        responseHeaders.delete('Clear-Site-Data');
+      }
+
+      // --- 5. Traffic Padding ---
+      const padSize = Math.floor(Math.random() * 2048) + 512; 
+      responseHeaders.set('X-Padding-Obfuscation', '0'.repeat(padSize));
+
+      return new Response(response.body, {
+        status: response.status,
+        headers: responseHeaders
+      });
+      
+    } catch (error) {
+      return new Response(\`Proxy Error: \${error.message}\`, { status: 500 });
+    }
+  }
+};`;
 
   const handleBrowse = () => {
     let target = targetUrl.trim();
@@ -223,6 +392,70 @@ export default function App() {
                       </tr>
                     </tbody>
                   </table>
+                </div>
+              </div>
+
+              {/* DNS Setup Guide */}
+              <div className="bg-white/90 rounded-2xl shadow-sm border border-white/60 overflow-hidden">
+                <div className="border-b border-black/5 px-6 py-4 bg-white/50">
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <Globe className="w-5 h-5 text-gray-700" />
+                    {t.dnsTitle}
+                  </h2>
+                </div>
+                <div className="p-6">
+                  <p className="text-sm text-gray-600 mb-6">{t.dnsDesc}</p>
+                  <ol className="space-y-4 text-sm text-gray-700 relative border-l border-gray-200 ml-3 pl-5">
+                    <li className="relative">
+                      <span className="absolute -left-[29px] top-0.5 bg-white border-2 border-blue-500 text-blue-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold">1</span>
+                      <p>{t.dnsStep1}</p>
+                    </li>
+                    <li className="relative">
+                      <span className="absolute -left-[29px] top-0.5 bg-white border-2 border-blue-500 text-blue-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold">2</span>
+                      <p>{t.dnsStep2}</p>
+                    </li>
+                    <li className="relative">
+                      <span className="absolute -left-[29px] top-0.5 bg-white border-2 border-blue-500 text-blue-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold">3</span>
+                      <p>{t.dnsStep3}</p>
+                    </li>
+                    <li className="relative">
+                      <span className="absolute -left-[29px] top-0.5 bg-white border-2 border-blue-500 text-blue-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold">4</span>
+                      <p>{t.dnsStep4}</p>
+                    </li>
+                    <li className="relative">
+                      <span className="absolute -left-[29px] top-0.5 bg-white border-2 border-blue-500 text-blue-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold">5</span>
+                      <p>{t.dnsStep5}</p>
+                    </li>
+                  </ol>
+                </div>
+              </div>
+
+              {/* Worker Code Deployment Guide */}
+              <div className="bg-white/90 rounded-2xl shadow-sm border border-white/60 overflow-hidden">
+                <div className="border-b border-black/5 px-6 py-4 bg-white/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <Terminal className="w-5 h-5 text-gray-700" />
+                    {t.workerDeployTitle}
+                  </h2>
+                  <button
+                    onClick={copyToClipboard}
+                    className="flex items-center space-x-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors bg-white border border-gray-200 px-3 py-1.5 rounded-lg shadow-sm"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copied ? (lang === 'zh' ? '已复制' : 'Copied') : (lang === 'zh' ? '复制代码' : 'Copy Code')}</span>
+                  </button>
+                </div>
+                <div className="p-6 pb-0">
+                  <p className="text-sm text-gray-600">{t.workerDeployDesc}</p>
+                </div>
+                <div className="p-6">
+                  <div className="bg-[#1e1e1e] rounded-xl overflow-hidden shadow-inner border border-gray-800">
+                    <div className="p-4 overflow-x-auto max-h-[500px]">
+                      <pre className="font-mono text-[12px] text-[#d4d4d4] leading-relaxed">
+                        <code>{workerCode}</code>
+                      </pre>
+                    </div>
+                  </div>
                 </div>
               </div>
 
