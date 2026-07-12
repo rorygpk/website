@@ -11,8 +11,12 @@ async function startServer() {
   // We need to proxy everything that isn't a local static asset or API route
   // We'll use a custom middleware to handle the proxying logic before Vite
 
-  app.use('/proxy', async (req, res, next) => {
-    const pathStr = req.originalUrl.slice(7); // Remove /proxy/ prefix
+  app.use(async (req, res, next) => {
+    // 1. Skip our own API proxies
+    if (req.url.startsWith('/api/')) return next();
+
+    let isExplicitProxy = req.url.startsWith('/proxy/');
+    let pathStr = isExplicitProxy ? req.url.slice(7) : req.url.slice(1);
     
     // Check if it's a URL or Domain
     const isUrlOrDomain = (str) => {
@@ -29,20 +33,23 @@ async function startServer() {
     let targetUrl = '';
     
     // Check if the path itself is a URL
-    if (isUrlOrDomain(pathStr.split('?')[0])) {
-      targetUrl = getFullTarget(pathStr);
+    if (isExplicitProxy) {
+      if (isUrlOrDomain(pathStr.split('?')[0])) {
+        targetUrl = getFullTarget(pathStr);
+      }
     } else {
       // Fallback: check referer if we're loading assets for a proxied page
       const referer = req.headers.referer;
       if (referer) {
         try {
           const refUrl = new URL(referer);
-          // If the referer is our own host and starts with proxy
+          // If the referer is our own host and starts with /proxy/
           if (refUrl.host === req.headers.host && refUrl.pathname.startsWith('/proxy/')) {
             const refPath = refUrl.pathname.slice(7); // remove /proxy/
             if (isUrlOrDomain(refPath)) {
                const baseTarget = new URL(getFullTarget(refPath));
-               targetUrl = new URL(pathStr, baseTarget.origin).toString();
+               // Construct the URL using the base target and the original request URL
+               targetUrl = new URL(req.url, baseTarget.origin).toString();
             }
           }
         } catch(e) {
