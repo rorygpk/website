@@ -1,0 +1,6 @@
+{
+  "name": "Cloudflare AI Proxy Configurator",
+  "description": "A setup guide and configuration script for deploying a Cloudflare Worker to reverse proxy OpenAI and Gemini APIs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
