@@ -161,7 +161,7 @@ export default {
        return new Response("Proxy active. Append a target URL (e.g., /https://google.com).", { status: 200 });
     }
 
-    // --- 4. Request Construction & Anonymization ---
+    // --- 4. Request Construction, Speed & Anonymization ---
     const proxyHeaders = new Headers(request.headers);
     const targetUrlObj = new URL(targetUrl);
     
@@ -173,6 +173,16 @@ export default {
        // Hide original client IP from target to ensure anonymity
        const cfHeaders = ['cf-connecting-ip', 'cf-ipcountry', 'cf-ray', 'cf-visitor', 'x-forwarded-proto', 'x-forwarded-for', 'x-real-ip', 'true-client-ip'];
        cfHeaders.forEach(h => proxyHeaders.delete(h));
+       
+       // Speed Optimization: Ensure compression is requested
+       if (!proxyHeaders.has('Accept-Encoding')) {
+           proxyHeaders.set('Accept-Encoding', 'gzip, deflate, br');
+       }
+    } else {
+       // API Quality Guarantee: Strip proxy headers that might trigger provider WAF blocks
+       proxyHeaders.delete('x-forwarded-for');
+       proxyHeaders.delete('cf-connecting-ip');
+       proxyHeaders.delete('x-real-ip');
     }
 
     const requestInit = {
@@ -185,6 +195,7 @@ export default {
     }
 
     try {
+      // Speed Optimization: Don't await body parsing, stream directly
       const response = await fetch(targetUrl, requestInit);
       let responseHeaders = new Headers(response.headers);
 
