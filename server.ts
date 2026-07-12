@@ -72,6 +72,7 @@ async function startServer() {
             key !== 'host' && 
             key !== 'origin' && 
             key !== 'referer' &&
+            key !== 'connection' &&
             !key.startsWith('cf-') &&
             !key.startsWith('x-forwarded-') &&
             key !== 'x-real-ip' &&
@@ -177,6 +178,7 @@ async function startServer() {
                 key !== 'host' && 
                 key !== 'origin' && 
                 key !== 'referer' &&
+                key !== 'connection' &&
                 !key.startsWith('cf-') &&
                 !key.startsWith('x-forwarded-') &&
                 key !== 'x-real-ip'
