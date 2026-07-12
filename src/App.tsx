@@ -148,7 +148,48 @@ export default {
     }
 
     if (!targetUrl) {
-       return new Response("Proxy active. Append a target URL (e.g., /google.com) or an API path (e.g., /openai/v1/chat/completions).", { status: 200 });
+       const html = "<!DOCTYPE html>\\n" +
+"<html lang=\\"zh\\">\\n" +
+"<head>\\n" +
+"<meta charset=\\"UTF-8\\">\\n" +
+"<meta name=\\"viewport\\" content=\\"width=device-width, initial-scale=1.0\\">\\n" +
+"<title>Quantum Secure Proxy</title>\\n" +
+"<script src=\\"https://cdn.tailwindcss.com\\"></script>\\n" +
+"</head>\\n" +
+"<body class=\\"bg-[#f0f2f5] text-gray-900 min-h-screen flex flex-col items-center p-0 m-0 font-sans\\">\\n" +
+"    <div class=\\"w-full h-screen bg-white flex flex-col overflow-hidden\\">\\n" +
+"        <div class=\\"h-14 bg-white/80 backdrop-blur flex items-center px-4 border-b border-gray-200 shadow-sm flex-shrink-0\\">\\n" +
+"            <div class=\\"flex space-x-2 w-1/4\\">\\n" +
+"                <div class=\\"w-3 h-3 rounded-full bg-red-400\\"></div>\\n" +
+"                <div class=\\"w-3 h-3 rounded-full bg-yellow-400\\"></div>\\n" +
+"                <div class=\\"w-3 h-3 rounded-full bg-green-400\\"></div>\\n" +
+"            </div>\\n" +
+"            <div class=\\"flex-1 flex justify-center\\">\\n" +
+"                <form id=\\"proxyForm\\" class=\\"w-full max-w-2xl relative\\" onsubmit=\\"event.preventDefault(); loadUrl();\\">\\n" +
+"                    <input type=\\"text\\" id=\\"urlInput\\" class=\\"w-full bg-gray-100 text-gray-800 rounded-full px-4 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-200 transition-all\\" placeholder=\\"输入网址 (如 google.com) 或搜索内容\\">\\n" +
+"                </form>\\n" +
+"            </div>\\n" +
+"            <div class=\\"w-1/4 flex justify-end\\">\\n" +
+"                <span class=\\"text-xs text-gray-400 font-medium tracking-wider\\">QUANTUM PROXY</span>\\n" +
+"            </div>\\n" +
+"        </div>\\n" +
+"        <iframe id=\\"proxyFrame\\" class=\\"flex-1 w-full bg-white\\" src=\\"\\" frameborder=\\"0\\"></iframe>\\n" +
+"    </div>\\n" +
+"    <script>\\n" +
+"        function loadUrl() {\\n" +
+"            let val = document.getElementById('urlInput').value.trim();\\n" +
+"            if (!val) return;\\n" +
+"            if (!val.startsWith('http') && (!val.includes('.') || val.includes(' '))) {\\n" +
+"                val = 'https://www.google.com/search?q=' + encodeURIComponent(val);\\n" +
+"            } else if (!val.startsWith('http')) {\\n" +
+"                val = 'https://' + val;\\n" +
+"            }\\n" +
+"            document.getElementById('proxyFrame').src = '/' + val;\\n" +
+"        }\\n" +
+"    </script>\\n" +
+"</body>\\n" +
+"</html>";
+       return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 
     // --- 4. Request Construction & Anonymization ---

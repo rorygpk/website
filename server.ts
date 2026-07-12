@@ -68,17 +68,24 @@ async function startServer() {
         
         // Copy most headers from original request
         for (const key in req.headers) {
+          const lowerKey = key.toLowerCase();
+          const val = req.headers[key];
           if (
-            key !== 'host' && 
-            key !== 'origin' && 
-            key !== 'referer' &&
-            key !== 'connection' &&
-            !key.startsWith('cf-') &&
-            !key.startsWith('x-forwarded-') &&
-            key !== 'x-real-ip' &&
-            key !== 'true-client-ip'
+            val !== undefined &&
+            lowerKey !== 'host' && 
+            lowerKey !== 'origin' && 
+            lowerKey !== 'referer' &&
+            lowerKey !== 'connection' &&
+            lowerKey !== 'keep-alive' &&
+            lowerKey !== 'upgrade' &&
+            lowerKey !== 'content-length' &&
+            lowerKey !== 'transfer-encoding' &&
+            !lowerKey.startsWith('cf-') &&
+            !lowerKey.startsWith('x-forwarded-') &&
+            lowerKey !== 'x-real-ip' &&
+            lowerKey !== 'true-client-ip'
           ) {
-            proxyHeaders.set(key, req.headers[key]);
+            proxyHeaders.set(key, Array.isArray(val) ? val.join(', ') : val);
           }
         }
         
@@ -95,10 +102,13 @@ async function startServer() {
         };
         
         if (req.method !== 'GET' && req.method !== 'HEAD') {
-          // For simplicity in this demo, we're not streaming the body perfectly if it's large, 
-          // but express body-parser isn't enabled yet so it might be tricky. 
-          // We'll skip body forwarding for the pure proxy in this simple implementation
-          // If you need full body forwarding in express, you'd pipe req to the fetch call.
+            const chunks = [];
+            for await (const chunk of req) {
+                chunks.push(chunk);
+            }
+            if (chunks.length > 0) {
+                requestInit.body = Buffer.concat(chunks);
+            }
         }
 
         const proxyRes = await fetch(targetUrl, requestInit);
@@ -112,7 +122,9 @@ async function startServer() {
             lowerKey !== 'x-frame-options' &&
             lowerKey !== 'content-security-policy' &&
             lowerKey !== 'content-security-policy-report-only' &&
-            lowerKey !== 'clear-site-data'
+            lowerKey !== 'clear-site-data' &&
+            lowerKey !== 'content-encoding' &&
+            lowerKey !== 'content-length'
           ) {
             // Rewrite location header for redirects
             if (lowerKey === 'location' && value) {
@@ -174,16 +186,23 @@ async function startServer() {
             
             const proxyHeaders = new Headers();
             for (const key in req.headers) {
+              const lowerKey = key.toLowerCase();
+              const val = req.headers[key];
               if (
-                key !== 'host' && 
-                key !== 'origin' && 
-                key !== 'referer' &&
-                key !== 'connection' &&
-                !key.startsWith('cf-') &&
-                !key.startsWith('x-forwarded-') &&
-                key !== 'x-real-ip'
+                val !== undefined &&
+                lowerKey !== 'host' && 
+                lowerKey !== 'origin' && 
+                lowerKey !== 'referer' &&
+                lowerKey !== 'connection' &&
+                lowerKey !== 'keep-alive' &&
+                lowerKey !== 'upgrade' &&
+                lowerKey !== 'content-length' &&
+                lowerKey !== 'transfer-encoding' &&
+                !lowerKey.startsWith('cf-') &&
+                !lowerKey.startsWith('x-forwarded-') &&
+                lowerKey !== 'x-real-ip'
               ) {
-                proxyHeaders.set(key, req.headers[key]);
+                proxyHeaders.set(key, Array.isArray(val) ? val.join(', ') : val);
               }
             }
             

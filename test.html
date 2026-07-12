@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quantum Secure Proxy</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center p-4">
+    <div class="w-full max-w-5xl bg-gray-800 rounded-xl shadow-2xl border border-gray-700 mt-8 overflow-hidden flex flex-col h-[85vh]">
+        <div class="h-14 bg-gray-900 flex items-center px-4 border-b border-gray-700">
+            <div class="flex space-x-2 w-1/4">
+                <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+            </div>
+            <div class="flex-1 flex justify-center">
+                <form id="proxyForm" class="w-full max-w-2xl relative" onsubmit="event.preventDefault(); loadUrl();">
+                    <input type="text" id="urlInput" class="w-full bg-gray-700 text-white rounded-full px-4 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="输入网址 (如 google.com) 或搜索内容">
+                </form>
+            </div>
+            <div class="w-1/4"></div>
+        </div>
+        <iframe id="proxyFrame" class="flex-1 w-full bg-white" src="" frameborder="0"></iframe>
+    </div>
+    <script>
+        function loadUrl() {
+            let val = document.getElementById('urlInput').value.trim();
+            if (!val) return;
+            if (!val.startsWith('http') && (!val.includes('.') || val.includes(' '))) {
+                val = 'https://www.google.com/search?q=' + encodeURIComponent(val);
+            } else if (!val.startsWith('http')) {
+                val = 'https://' + val;
+            }
+            document.getElementById('proxyFrame').src = '/' + val;
+        }
+    </script>
+</body>
+</html>
