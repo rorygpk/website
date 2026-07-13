@@ -141,6 +141,11 @@ export default {
             if (isUrlOrDomain(refPath)) {
                const baseTarget = new URL(getFullTarget(refPath));
                targetUrl = new URL(url.pathname + url.search, baseTarget.origin).toString();
+               
+               const isDoc = request.headers.get('sec-fetch-dest') === 'document' || request.headers.get('sec-fetch-dest') === 'iframe' || (request.headers.get('accept') || '').includes('text/html');
+               if (isDoc) {
+                   return new Response('', { status: 302, headers: { Location: '/' + targetUrl } });
+               }
             }
           } catch(e) {}
         }
@@ -265,7 +270,7 @@ export default {
     // Auto Google Search if not a URL/Domain
     if (!target.startsWith('http://') && !target.startsWith('https://')) {
         if (!target.includes('.') || target.includes(' ')) {
-             target = `https://www.google.com/search?q=${encodeURIComponent(target)}`;
+             target = `https://www.bing.com/search?q=${encodeURIComponent(target)}`;
         }
     }
     

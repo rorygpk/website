@@ -59,6 +59,17 @@ async function startServer() {
     }
 
     if (targetUrl) {
+      // If we derived the target from referer but the request didn't explicitly have /proxy/,
+      // and it is a document navigation, we should redirect the browser to the /proxy/ path.
+      // This ensures the iframe's URL updates to /proxy/... so subsequent clicks keep working.
+      if (!isExplicitProxy) {
+          const isDoc = req.headers['sec-fetch-dest'] === 'document' || req.headers['sec-fetch-dest'] === 'iframe' || (req.headers.accept && req.headers.accept.includes('text/html'));
+          if (isDoc) {
+              res.redirect(302, `/proxy/${targetUrl}`);
+              return;
+          }
+      }
+
       // It's a proxy request, handle it
       try {
         const targetUrlObj = new URL(targetUrl);
@@ -124,14 +135,17 @@ async function startServer() {
             lowerKey !== 'content-security-policy-report-only' &&
             lowerKey !== 'clear-site-data' &&
             lowerKey !== 'content-encoding' &&
-            lowerKey !== 'content-length'
+            lowerKey !== 'content-length' &&
+            lowerKey !== 'set-cookie'
           ) {
             // Rewrite location header for redirects
             if (lowerKey === 'location' && value) {
                 if (value.startsWith('http')) {
                     responseHeaders[key] = `/proxy/${value}`;
+                } else if (value.startsWith('//')) {
+                    responseHeaders[key] = `/proxy/https:${value}`;
                 } else if (value.startsWith('/')) {
-                    responseHeaders[key] = `/proxy/${targetUrlObj.hostname}${value}`;
+                    responseHeaders[key] = `/proxy/${targetUrlObj.origin}${value}`;
                 } else {
                     responseHeaders[key] = value;
                 }
@@ -141,21 +155,121 @@ async function startServer() {
           }
         });
         
-        // Set headers and status
-        res.set(responseHeaders);
-        res.status(proxyRes.status);
+        if (proxyRes.headers.getSetCookie) {
+            const cookies = proxyRes.headers.getSetCookie();
+            if (cookies && cookies.length > 0) {
+                // Rewrite domain and path for cookies so they are accepted by the browser
+                responseHeaders['set-cookie'] = cookies.map(c => {
+                    return c.replace(/domain=[^;]+/i, '').replace(/Path=[^;]+/i, 'Path=/');
+                });
+            }
+        }
         
-        // Stream response back
-        if (proxyRes.body) {
-           const reader = proxyRes.body.getReader();
-           while (true) {
-             const { done, value } = await reader.read();
-             if (done) break;
-             res.write(value);
-           }
-           res.end();
+        // --- API TRANSPORT OPTIMIZATION: Always add liberal CORS headers ---
+        responseHeaders['access-control-allow-origin'] = '*';
+        responseHeaders['access-control-allow-methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD';
+        responseHeaders['access-control-allow-headers'] = '*';
+        responseHeaders['access-control-expose-headers'] = '*';
+        responseHeaders['access-control-allow-credentials'] = 'true';
+        
+        // Handle OPTIONS preflight requests natively if the target didn't respond well
+        if (req.method === 'OPTIONS' && proxyRes.status >= 400) {
+            res.set(responseHeaders);
+            res.status(204).end();
+            return;
+        }
+
+        let isHtml = false;
+        if (responseHeaders['content-type'] && responseHeaders['content-type'].toLowerCase().includes('text/html')) {
+            isHtml = true;
+        }
+
+        if (isHtml && proxyRes.body) {
+            const chunks = [];
+            const reader = proxyRes.body.getReader();
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+            }
+            let html = Buffer.concat(chunks).toString('utf8');
+            
+            // Rewrite absolute URLs
+            html = html.replace(/(src|href|action)=["'](https?:\/\/[^"']+)["']/gi, (match, attr, url) => {
+                return `${attr}="/proxy/${url}"`;
+            });
+            // Rewrite protocol-relative URLs
+            html = html.replace(/(src|href|action)=["'](\/\/[^"']+)["']/gi, (match, attr, url) => {
+                return `${attr}="/proxy/https:${url}"`;
+            });
+            // Rewrite srcset
+            html = html.replace(/srcset=["']([^"']+)["']/gi, (match, content) => {
+                const rewritten = content.split(',').map(part => {
+                    let [url, size] = part.trim().split(/\s+/);
+                    if (url && url.startsWith('http')) {
+                        url = '/proxy/' + url;
+                    } else if (url && url.startsWith('//')) {
+                        url = '/proxy/https:' + url;
+                    }
+                    return size ? `${url} ${size}` : url;
+                }).join(', ');
+                return `srcset="${rewritten}"`;
+            });
+
+            // Inject client-side interception script
+            const script = `<script>
+               document.addEventListener('click', function(e) {
+                   const a = e.target.closest('a');
+                   if (a && a.href && a.href.startsWith('http') && !a.href.startsWith(location.origin + '/proxy/')) {
+                       e.preventDefault();
+                       location.href = '/proxy/' + a.href;
+                   }
+               }, true);
+               document.addEventListener('submit', function(e) {
+                   if (e.target && e.target.action && e.target.action.startsWith('http') && !e.target.action.startsWith(location.origin + '/proxy/')) {
+                       e.preventDefault();
+                       const form = e.target;
+                       const method = (form.method || 'GET').toUpperCase();
+                       if (method === 'GET') {
+                           const url = new URL(form.action);
+                           const formData = new FormData(form);
+                           const params = new URLSearchParams(formData);
+                           location.href = '/proxy/' + url.origin + url.pathname + '?' + params.toString();
+                       } else {
+                           form.action = '/proxy/' + form.action;
+                           form.submit();
+                       }
+                   }
+               }, true);
+            </script>`;
+            
+            if (html.match(/<head[^>]*>/i)) {
+                html = html.replace(/(<head[^>]*>)/i, `$1${script}`);
+            } else {
+                html = script + html;
+            }
+
+            delete responseHeaders['content-length'];
+            res.set(responseHeaders);
+            res.status(proxyRes.status);
+            res.send(html);
         } else {
-           res.end();
+            // Set headers and status
+            res.set(responseHeaders);
+            res.status(proxyRes.status);
+            
+            // Stream response back
+            if (proxyRes.body) {
+               const reader = proxyRes.body.getReader();
+               while (true) {
+                 const { done, value } = await reader.read();
+                 if (done) break;
+                 res.write(value);
+               }
+               res.end();
+            } else {
+               res.end();
+            }
         }
 
       } catch (error) {
