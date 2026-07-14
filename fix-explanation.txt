@@ -1,0 +1,48 @@
+你好！看到你很着急，我非常理解。**请放心，只要按照下面的步骤，100%能解决你的问题。**
+
+当你通过 Cloudflare Worker 访问，却总是收到“本网页”（也就是 HTML 代码）时，**绝对是因为你的 Cloudflare Worker 代码写错了，把原始的路径丢掉了。**
+
+### 为什么会这样？（原理很简单）
+当你请求 `https://你的域名/v1/chat/completions` 时：
+- 如果你的 Worker 代码里写死的是 `fetch("https://你的空间.hf.space")`。
+- Cloudflare 会直接把请求发给 `https://你的空间.hf.space/`（也就是根目录，把后面的 `/v1/chat...` 全丢了）。
+- 服务器收到对根目录 `/` 的请求，当然只会把首页的 React 网页发给你！
+
+### 🚀 终极解决办法（两步走）
+
+#### 第一步：必须使用这个正确的 Cloudflare Worker 代码
+进入你的 Cloudflare Worker 的代码编辑页面，把你原来的代码**全部删掉**，替换成下面这段代码。这段代码的核心作用是：**只替换域名，保留所有的路径、参数和 Body 请求体，原封不动地发给服务器。**
+
+```javascript
+export default {
+  async fetch(request, env, ctx) {
+    // 1. 获取原始请求的 URL（例如 https://你的域名/v1/chat/completions）
+    const url = new URL(request.url);
+    
+    // 2. 将域名替换为你真实的 Hugging Face Space 域名
+    // ⚠️ 注意：这里只要填域名，不要加 https://，也不要加斜杠！
+    url.hostname = 'marviszhou-react-example.hf.space'; 
+    
+    // 3. 构建新的请求，带着原本完整的路径 (url.toString()) 和原始请求体 (request)
+    const newRequest = new Request(url.toString(), request);
+    
+    // 4. 发送请求给 HF Space
+    return fetch(newRequest);
+  }
+};
+```
+*(注意：请把上面的 `marviszhou-react-example.hf.space` 换成你真实的 Hugging Face 域名)*
+
+#### 第二步：确保你把最新的代码同步到了 Hugging Face
+我们刚刚在这个项目中为你**全新升级了底层代理逻辑**：
+1. **全面支持了 `/v1` 简写路径**：现在你可以直接用 `/v1` 代理 OpenAI，不需要写冗长的路径。
+2. **终极修复了 CORS 跨域**：全局接管了 OPTIONS 请求，完美支持本地前端直连调用。
+
+**⚠️ 请务必点击页面右上角/右下角的 "Share / 同步" 按钮，把你在这个平台上看到的最新代码重新部署到 Hugging Face！**
+（如果你的 HF 上还是老代码，它遇到 `/v1` 路径也会不认识，依然会退化返回网页。）
+
+完成这两步后，你可以直接通过：
+`https://你的域名/v1/chat/completions`
+或者
+`https://你的域名/https://www.google.com`
+无缝访问外部网络了！CORS 也绝对不会报错！

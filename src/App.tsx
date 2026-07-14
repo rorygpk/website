@@ -74,188 +74,191 @@ export default function App() {
     }
   };
 
-  const workerCode = `/**
- * Cloudflare Worker - Quantum Secure AI & Web Proxy
- * 
- * Includes full web proxying and transparent API acceleration.
- */
-
-export default {
+  const workerCode = `export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const pathStr = url.pathname.slice(1); // remove leading slash
+    const search = url.search;
 
-    // --- 1. Preflight & CORS ---
+    // --- 1. 全局 CORS 跨域处理 (支持本地前端网页直接调用) ---
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD',
+      'Access-Control-Allow-Headers': '*',
+      'Access-Control-Expose-Headers': '*',
+      'Access-Control-Allow-Credentials': 'true',
+    };
+
     if (request.method === 'OPTIONS') {
       return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': '*',
-        }
+        status: 204,
+        headers: corsHeaders
       });
     }
 
-    // --- 2. API Routing ---
-    let targetUrl = '';
-    let isApi = false;
-    let proxyHeaders = new Headers(request.headers);
-    
+    // --- 2. 预设主流 AI API 路由映射 ---
     const apiRoutes = {
-      '/openai': 'https://api.openai.com',
-      '/gemini': 'https://generativelanguage.googleapis.com',
-      '/anthropic': 'https://api.anthropic.com',
-      '/xai': 'https://api.x.ai',
-      '/deepseek': 'https://api.deepseek.com'
+      'api/openai': 'https://api.openai.com',
+      'v1': 'https://api.openai.com/v1',
+      'api/gemini': 'https://generativelanguage.googleapis.com',
+      'api/anthropic': 'https://api.anthropic.com',
+      'api/xai': 'https://api.x.ai',
+      'api/deepseek': 'https://api.deepseek.com'
     };
 
+    let targetUrl = '';
+    
+    // 检查是否匹配预设的 API 路由
     for (const [prefix, targetBase] of Object.entries(apiRoutes)) {
-      if (url.pathname.startsWith(prefix)) {
-        isApi = true;
-        targetUrl = targetBase + url.pathname.replace(prefix, '') + url.search;
-        break;
-      }
-    }
-
-    // --- 3. Dynamic Full Web Proxy ---
-    if (!isApi) {
-      const pathStr = url.pathname.slice(1);
-      
-      const isUrlOrDomain = (str) => {
-          if (str.startsWith('http://') || str.startsWith('https://')) return true;
-          return /^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}(\\/.*)?$/.test(str) && !str.includes(' ');
-      };
-      
-      const getFullTarget = (str) => {
-          if (str.startsWith('http://') || str.startsWith('https://')) return str;
-          return 'https://' + str;
-      };
-
-      if (isUrlOrDomain(pathStr.split('?')[0])) {
-        targetUrl = getFullTarget(pathStr) + url.search;
-      } else {
-        const referer = request.headers.get('Referer');
-        if (referer) {
-          try {
-            const refUrl = new URL(referer);
-            const refPath = refUrl.pathname.slice(1);
-            if (isUrlOrDomain(refPath)) {
-               const baseTarget = new URL(getFullTarget(refPath));
-               targetUrl = new URL(url.pathname + url.search, baseTarget.origin).toString();
-               
-               const isDoc = request.headers.get('sec-fetch-dest') === 'document' || request.headers.get('sec-fetch-dest') === 'iframe' || (request.headers.get('accept') || '').includes('text/html');
-               if (isDoc) {
-                   return new Response('', { status: 302, headers: { Location: '/' + targetUrl } });
-               }
-            }
-          } catch(e) {}
+        if (pathStr === prefix || pathStr.startsWith(prefix + '/')) {
+             const rest = pathStr.slice(prefix.length);
+             targetUrl = targetBase + rest + search;
+             break;
         }
+    }
+
+    // --- 3. 动态万能代理 (例如请求 /https://www.google.com) ---
+    if (!targetUrl && pathStr) {
+      let decodedPath = decodeURIComponent(pathStr);
+      // 兼容旧版带 proxy/ 前缀的请求
+      if (decodedPath.startsWith('proxy/')) {
+         decodedPath = decodedPath.slice(6);
+      }
+
+      if (decodedPath.startsWith('http://') || decodedPath.startsWith('https://')) {
+          targetUrl = decodedPath + search;
+      } else if (/^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}(\\/.*)?$/.test(decodedPath)) {
+          targetUrl = 'https://' + decodedPath + search;
       }
     }
 
+    // --- 4. 根目录：返回使用说明网页 ---
     if (!targetUrl) {
-       const html = "<!DOCTYPE html>\\n" +
-"<html lang=\\"zh\\">\\n" +
-"<head>\\n" +
-"<meta charset=\\"UTF-8\\">\\n" +
-"<meta name=\\"viewport\\" content=\\"width=device-width, initial-scale=1.0\\">\\n" +
-"<title>Quantum Secure Proxy</title>\\n" +
-"<script src=\\"https://cdn.tailwindcss.com\\"></script>\\n" +
-"</head>\\n" +
-"<body class=\\"bg-[#f0f2f5] text-gray-900 min-h-screen flex flex-col items-center p-0 m-0 font-sans\\">\\n" +
-"    <div class=\\"w-full h-screen bg-white flex flex-col overflow-hidden\\">\\n" +
-"        <div class=\\"h-14 bg-white/80 backdrop-blur flex items-center px-4 border-b border-gray-200 shadow-sm flex-shrink-0\\">\\n" +
-"            <div class=\\"flex space-x-2 w-1/4\\">\\n" +
-"                <div class=\\"w-3 h-3 rounded-full bg-red-400\\"></div>\\n" +
-"                <div class=\\"w-3 h-3 rounded-full bg-yellow-400\\"></div>\\n" +
-"                <div class=\\"w-3 h-3 rounded-full bg-green-400\\"></div>\\n" +
-"            </div>\\n" +
-"            <div class=\\"flex-1 flex justify-center\\">\\n" +
-"                <form id=\\"proxyForm\\" class=\\"w-full max-w-2xl relative\\" onsubmit=\\"event.preventDefault(); loadUrl();\\">\\n" +
-"                    <input type=\\"text\\" id=\\"urlInput\\" class=\\"w-full bg-gray-100 text-gray-800 rounded-full px-4 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-200 transition-all\\" placeholder=\\"输入网址 (如 google.com) 或搜索内容\\">\\n" +
-"                </form>\\n" +
-"            </div>\\n" +
-"            <div class=\\"w-1/4 flex justify-end\\">\\n" +
-"                <span class=\\"text-xs text-gray-400 font-medium tracking-wider\\">QUANTUM PROXY</span>\\n" +
-"            </div>\\n" +
-"        </div>\\n" +
-"        <iframe id=\\"proxyFrame\\" class=\\"flex-1 w-full bg-white\\" src=\\"\\" frameborder=\\"0\\"></iframe>\\n" +
-"    </div>\\n" +
-"    <script>\\n" +
-"        function loadUrl() {\\n" +
-"            let val = document.getElementById('urlInput').value.trim();\\n" +
-"            if (!val) return;\\n" +
-"            if (!val.startsWith('http') && (!val.includes('.') || val.includes(' '))) {\\n" +
-"                val = 'https://www.google.com/search?q=' + encodeURIComponent(val);\\n" +
-"            } else if (!val.startsWith('http')) {\\n" +
-"                val = 'https://' + val;\\n" +
-"            }\\n" +
-"            document.getElementById('proxyFrame').src = '/' + val;\\n" +
-"        }\\n" +
-"    </script>\\n" +
-"</body>\\n" +
-"</html>";
-       return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+        return new Response(\`
+            <html>
+                <head>
+                    <title>Cloudflare 终极代理节点</title>
+                    <meta charset="utf-8">
+                    <style>
+                        body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; line-height: 1.6; max-width: 800px; margin: 0 auto; color: #333; }
+                        h1 { color: #f6821f; }
+                        code { background: #f1f1f1; padding: 4px 8px; border-radius: 4px; font-family: monospace; color: #e83e8c; }
+                        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+                    </style>
+                </head>
+                <body>
+                    <h1>🚀 Cloudflare 终极万能代理已就绪！</h1>
+                    <p>这是一个运行在 Cloudflare 边缘网络的高性能代理节点。原生支持跨域 (CORS)，无需配置即可直接被前端项目或本地代码调用。</p>
+                    
+                    <div class="card">
+                        <h3>🤖 AI API 快捷代理 (直接替换官方域名即可)</h3>
+                        <ul>
+                            <li><b>OpenAI:</b> <code>https://\${url.hostname}/v1/chat/completions</code></li>
+                            <li><b>Anthropic:</b> <code>https://\${url.hostname}/api/anthropic/v1/messages</code></li>
+                            <li><b>DeepSeek:</b> <code>https://\${url.hostname}/api/deepseek/chat/completions</code></li>
+                        </ul>
+                    </div>
+
+                    <div class="card">
+                        <h3>🌍 万能网页 / API 代理 (前缀拼接)</h3>
+                        <p>只需在域名后拼接目标 URL 即可：</p>
+                        <ul>
+                            <li><b>任意 API:</b> <code>https://\${url.hostname}/https://api.github.com/users</code></li>
+                            <li><b>任意网页:</b> <code>https://\${url.hostname}/https://www.google.com</code></li>
+                        </ul>
+                    </div>
+                </body>
+            </html>
+        \`, {
+            headers: {
+                'Content-Type': 'text/html;charset=UTF-8',
+                ...corsHeaders
+            }
+        });
     }
 
-    // --- 4. Request Construction & Anonymization ---
-    const targetUrlObj = new URL(targetUrl);
-    proxyHeaders.set('Host', targetUrlObj.hostname);
-    
-    if (!isApi) {
-       proxyHeaders.delete('Origin');
-       proxyHeaders.delete('Referer');
-       const cfHeaders = ['cf-connecting-ip', 'cf-ipcountry', 'cf-ray', 'cf-visitor', 'x-forwarded-proto', 'x-forwarded-for', 'x-real-ip', 'true-client-ip'];
-       cfHeaders.forEach(h => proxyHeaders.delete(h));
-    } else {
-       proxyHeaders.delete('x-forwarded-for');
-       proxyHeaders.delete('cf-connecting-ip');
-       proxyHeaders.delete('x-real-ip');
-    }
-
-    const requestInit = {
-      method: request.method,
-      headers: proxyHeaders,
-      redirect: 'manual'
-    };
-    
-    if (request.method !== 'GET' && request.method !== 'HEAD') {
-      requestInit.body = request.body;
-    }
-
+    // --- 5. 执行代理请求 ---
     try {
-      const response = await fetch(targetUrl, requestInit);
-      let responseHeaders = new Headers(response.headers);
+        const targetUrlObj = new URL(targetUrl);
+        
+        // 过滤不需要的请求头
+        const proxyHeaders = new Headers(request.headers);
+        proxyHeaders.delete('Host');
+        proxyHeaders.delete('Origin');
+        proxyHeaders.delete('Referer');
+        proxyHeaders.delete('cf-connecting-ip');
+        proxyHeaders.delete('cf-ipcountry');
+        proxyHeaders.delete('cf-ray');
+        proxyHeaders.delete('cf-visitor');
+        proxyHeaders.delete('x-forwarded-proto');
+        proxyHeaders.delete('x-forwarded-for');
+        proxyHeaders.delete('x-real-ip');
+        
+        // 设置目标 Host
+        proxyHeaders.set('Host', targetUrlObj.hostname);
+        // 为了访问一些外网网页，最好带上一个真实的 User-Agent (如果没有的话)
+        if (!proxyHeaders.has('User-Agent')) {
+             proxyHeaders.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        }
+        
+        const requestInit = {
+            method: request.method,
+            headers: proxyHeaders,
+            redirect: 'manual' // 手动处理重定向，防止跳回原域名
+        };
 
-      if (isApi) {
-        responseHeaders.set('Access-Control-Allow-Origin', '*');
-      } else {
-        if ([301, 302, 303, 307, 308].includes(response.status)) {
-            const location = responseHeaders.get('Location');
-            if (location) {
-                if (location.startsWith('http')) {
-                    responseHeaders.set('Location', \`/\${location}\`);
-                } else if (location.startsWith('/')) {
-                    responseHeaders.set('Location', \`/\${targetUrlObj.hostname}\${location}\`);
-                }
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
+             requestInit.body = request.body;
+        }
+
+        const proxyRes = await fetch(targetUrl, requestInit);
+        
+        const responseHeaders = new Headers(proxyRes.headers);
+        
+        // 强制注入 CORS 响应头
+        for (const [key, value] of Object.entries(corsHeaders)) {
+            responseHeaders.set(key, value);
+        }
+
+        // 移除会阻止 iframe 嵌套或安全策略的响应头 (针对外网网页代理)
+        responseHeaders.delete('x-frame-options');
+        responseHeaders.delete('content-security-policy');
+        responseHeaders.delete('content-security-policy-report-only');
+        responseHeaders.delete('clear-site-data');
+
+        // 自动重写重定向地址，让请求继续走代理
+        if (responseHeaders.has('location')) {
+            const loc = responseHeaders.get('location');
+            if (loc.startsWith('http')) {
+                responseHeaders.set('location', \`/\${loc}\`);
+            } else if (loc.startsWith('/')) {
+                responseHeaders.set('location', \`/\${targetUrlObj.origin}\${loc}\`);
             }
         }
-        responseHeaders.delete('X-Frame-Options');
-        responseHeaders.delete('Content-Security-Policy');
-        responseHeaders.delete('Content-Security-Policy-Report-Only');
-        responseHeaders.delete('Clear-Site-Data');
-      }
+        
+        // 处理 Cookie 域名和路径问题
+        const cookies = proxyRes.headers.getSetCookie ? proxyRes.headers.getSetCookie() : [];
+        if (cookies && cookies.length > 0) {
+            responseHeaders.delete('set-cookie');
+            cookies.forEach(c => {
+                 responseHeaders.append('set-cookie', c.replace(/domain=[^;]+/i, '').replace(/Path=[^;]+/i, 'Path=/'));
+            });
+        }
 
-      // --- 5. Traffic Padding ---
-      const padSize = Math.floor(Math.random() * 2048) + 512; 
-      responseHeaders.set('X-Padding-Obfuscation', '0'.repeat(padSize));
+        return new Response(proxyRes.body, {
+            status: proxyRes.status,
+            statusText: proxyRes.statusText,
+            headers: responseHeaders
+        });
 
-      return new Response(response.body, {
-        status: response.status,
-        headers: responseHeaders
-      });
-      
-    } catch (error) {
-      return new Response(\`Proxy Error: \${error.message}\`, { status: 500 });
+    } catch (e) {
+        return new Response(JSON.stringify({ error: "代理请求失败: " + e.message, target: targetUrl }), {
+            status: 500,
+            headers: {
+                'Content-Type': 'application/json',
+                ...corsHeaders
+            }
+        });
     }
   }
 };`;

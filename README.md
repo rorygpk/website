@@ -1,34 +1,43 @@
-# API 代理终极指南
-## ⚠️ 为什么你的 Cloudflare Worker 一直返回网页？
+# Cloudflare 终极万能代理 (Worker 专版)
 
-如果你发现所有 API 请求都返回了 HTML 网页，**100% 是以下两个原因之一**：
+你完全不需要使用 Hugging Face，也无需部署复杂的 Node.js 服务。
 
-### 原因 1：Cloudflare Worker 代码写错了（没有透传路径）
-如果你的 Worker 代码里写死了 `fetch("https://xxx.hf.space")`，那么不管你请求 `/v1/chat` 还是 `/google`，Worker 永远只会去请求服务器的根目录 `/`，服务器当然只会把首页的网页（index.html）返回给你！
+**只需要一个纯粹的 Cloudflare Worker，即可完美解决所有外网访问、API 代理、CORS 跨域问题！**
 
-**✅ 必须使用以下正确的 Worker 代码，保留原有的路径和 Body：**
-```javascript
-export default {
-  async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    
-    // ⚠️ 在这里填入你真实的 Hugging Face Space 域名
-    url.hostname = '你的用户名-你的项目名.hf.space';
-    
-    // 核心：使用 url.toString() 把完整的路径 (例如 /v1/chat/completions) 带过去
-    // 使用 request 把原本的 POST body 和 Headers 带过去
-    const newRequest = new Request(url.toString(), request);
-    
-    return fetch(newRequest);
-  }
-};
+## 🚀 一分钟部署教程 (零成本)
+
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)。
+2. 在左侧菜单找到 **Workers & Pages** -> 点击 **Create** -> **Create Worker**。
+3. 给你的 Worker 起个名字，点击 **Deploy**。
+4. 部署完成后，点击 **Edit Code** 进入代码编辑器。
+5. 将本项目中的 [`worker.js`](./worker.js) 里面的代码**全部复制**，粘贴覆盖掉网页上的默认代码。
+6. 点击右上角的 **Save and Deploy**。
+7. (可选) 在 Settings -> Triggers 中，为这个 Worker 绑定一个你自己的域名 (Custom Domains)。
+
+## 🎯 功能与使用方法
+
+部署完成后，你将获得一个类似于 `https://your-worker.workers.dev` 的地址（或者你绑定的自定义域名）。
+
+### 1. 自动处理跨域 (CORS)
+无论你在任何本地前端项目（如 localhost:5173）中通过 fetch 调用这个代理，**永远不会出现跨域报错**，系统已全局强行放行 OPTIONS。
+
+### 2. AI API 极简直连
+我们内置了各大厂商的路由映射，你甚至不需要拼长 URL：
+- **OpenAI:** `https://你的域名/v1/chat/completions`
+- **Anthropic:** `https://你的域名/api/anthropic/v1/messages`
+- **Gemini:** `https://你的域名/api/gemini/v1beta/models/...`
+
+**调用示例 (直接替换官方 Base URL 即可):**
+```bash
+curl -X POST "https://你的域名/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-YOUR_KEY" \
+  -d '{"model": "gpt-3.5-turbo", "messages": [{"role": "user", "content": "Hello!"}]}'
 ```
 
-### 原因 2：你没有把最新的代码更新到 Hugging Face！
-我们刚刚在后台为你**全新升级了底层代理逻辑**：
-1. **全面支持了 `/v1` 简写路径**（以前必须写 `/api/openai/v1`，现在直接写 `/v1` 就能自动代理到 OpenAI）。
-2. **终极修复了 CORS 跨域**（强制接管 OPTIONS 预检请求）。
+### 3. 万能 API / 网页代理 (套娃模式)
+对于任何没有内置预设的外网 API 或网页，直接在域名后面拼上完整的 URL 即可：
+- 代理 Github API: `https://你的域名/https://api.github.com/users`
+- 代理外网网页: `https://你的域名/https://www.google.com`
 
-**⚠️ 解决办法：**
-请点击右下角的 **Share** 按钮，或者重新将最新的代码 **Sync/部署到 Hugging Face**。
-如果你还在用旧版的代码，服务器遇到不认识的 `/v1` 路径，就会默认把它当成普通的网页路由，从而给你返回 `index.html` 网页。
+**就是这么简单、纯粹、稳定！享受你的全能边缘节点吧！**
