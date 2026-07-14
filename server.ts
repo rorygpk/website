@@ -181,6 +181,10 @@ async function startServer() {
         
         
 
+        let isHtml = false;
+        if (responseHeaders['content-type'] && responseHeaders['content-type'].toLowerCase().includes('text/html')) {
+            isHtml = true;
+        }
         if (isHtml && proxyRes.body) {
             const chunks = [];
             const reader = proxyRes.body.getReader();
