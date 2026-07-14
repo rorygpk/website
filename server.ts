@@ -7,13 +7,29 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
 
+
+  // --- GLOBAL CORS HANDLING ---
+  app.use((req, res, next) => {
+    res.set({
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD',
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Expose-Headers': '*',
+        'Access-Control-Allow-Credentials': 'true'
+    });
+    if (req.method === 'OPTIONS') {
+        return res.status(204).end();
+    }
+    next();
+  });
+
   // --- 1. Dynamic Full Web Proxy Middleware ---
   // We need to proxy everything that isn't a local static asset or API route
   // We'll use a custom middleware to handle the proxying logic before Vite
 
   app.use(async (req, res, next) => {
     // 1. Skip our own API proxies
-    if (req.url.startsWith('/api/')) return next();
+    if (req.url.startsWith('/api/') || req.url.startsWith('/v1/')) return next();
 
     let isExplicitProxy = req.url.startsWith('/proxy/');
     let pathStr = isExplicitProxy ? req.url.slice(7) : req.url.slice(1);
@@ -33,10 +49,8 @@ async function startServer() {
     let targetUrl = '';
     
     // Check if the path itself is a URL
-    if (isExplicitProxy) {
-      if (isUrlOrDomain(pathStr.split('?')[0])) {
+    if (isUrlOrDomain(pathStr.split('?')[0])) {
         targetUrl = getFullTarget(pathStr);
-      }
     } else {
       // Fallback: check referer if we're loading assets for a proxied page
       const referer = req.headers.referer;
@@ -165,24 +179,7 @@ async function startServer() {
             }
         }
         
-        // --- API TRANSPORT OPTIMIZATION: Always add liberal CORS headers ---
-        responseHeaders['access-control-allow-origin'] = '*';
-        responseHeaders['access-control-allow-methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD';
-        responseHeaders['access-control-allow-headers'] = '*';
-        responseHeaders['access-control-expose-headers'] = '*';
-        responseHeaders['access-control-allow-credentials'] = 'true';
         
-        // Handle OPTIONS preflight requests natively if the target didn't respond well
-        if (req.method === 'OPTIONS' && proxyRes.status >= 400) {
-            res.set(responseHeaders);
-            res.status(204).end();
-            return;
-        }
-
-        let isHtml = false;
-        if (responseHeaders['content-type'] && responseHeaders['content-type'].toLowerCase().includes('text/html')) {
-            isHtml = true;
-        }
 
         if (isHtml && proxyRes.body) {
             const chunks = [];
@@ -287,6 +284,7 @@ async function startServer() {
   // Proxy for deep AI traffic management
   const apiRoutes = {
     '/api/openai': 'https://api.openai.com',
+    '/v1': 'https://api.openai.com/v1',
     '/api/gemini': 'https://generativelanguage.googleapis.com',
     '/api/anthropic': 'https://api.anthropic.com',
     '/api/xai': 'https://api.x.ai',
@@ -321,16 +319,12 @@ async function startServer() {
             }
             
             proxyHeaders.set('Host', new URL(targetBase).hostname);
-
             const requestInit = {
               method: req.method,
               headers: proxyHeaders,
             };
             
             if (req.method !== 'GET' && req.method !== 'HEAD') {
-                // Not passing body correctly for POST yet if body-parser is not used, 
-                // but since it's an AI API proxy, we need to pass the raw body. 
-                // Using raw body pass-through:
                 const chunks = [];
                 for await (const chunk of req) {
                     chunks.push(chunk);
@@ -342,10 +336,15 @@ async function startServer() {
             
             const proxyRes = await fetch(targetUrl, requestInit);
             
-            res.status(proxyRes.status);
+            // Set headers and status
+            const responseHeaders = {};
             proxyRes.headers.forEach((value, key) => {
-                res.setHeader(key, value);
+                if (key.toLowerCase() !== 'content-encoding' && key.toLowerCase() !== 'content-length') {
+                    responseHeaders[key] = value;
+                }
             });
+            res.set(responseHeaders);
+            res.status(proxyRes.status);
             
             if (proxyRes.body) {
                 const reader = proxyRes.body.getReader();
@@ -361,7 +360,7 @@ async function startServer() {
             
         } catch (error) {
             console.error("API Proxy Error:", error);
-            res.status(500).json({ error: `API Proxy Error: ${error.message}` });
+            res.status(500).json({ error: { message: "API Proxy Error: " + error.message } });
         }
     });
   });
