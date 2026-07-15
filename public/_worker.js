@@ -13,10 +13,8 @@ export default {
     // --- 1. 全局 CORS ---
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD',
-      'Access-Control-Allow-Headers': '*',
-      'Access-Control-Expose-Headers': '*',
-      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-api-key',
     };
 
     if (request.method === 'OPTIONS') {
@@ -51,9 +49,8 @@ export default {
     const apiRoutes = {
       'api/openai': 'https://api.openai.com',
       'v1': 'https://api.openai.com/v1',
-      'api/gemini': 'https://generativelanguage.googleapis.com',
       'api/anthropic': 'https://api.anthropic.com',
-      'api/xai': 'https://api.x.ai',
+      'api/gemini': 'https://generativelanguage.googleapis.com',
       'api/deepseek': 'https://api.deepseek.com'
     };
 
@@ -85,12 +82,10 @@ export default {
     if (!targetUrl && pathStr) {
       let decodedPath = decodeURIComponent(pathStr);
       if (decodedPath.startsWith('proxy/')) {
-         decodedPath = decodedPath.slice(6);
+          decodedPath = decodedPath.slice(6);
       }
       if (decodedPath.startsWith('http://') || decodedPath.startsWith('https://')) {
           targetUrl = decodedPath + search;
-      } else if (/^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(\/.*)?$/.test(decodedPath)) {
-          targetUrl = 'https://' + decodedPath + search;
       }
     }
 
@@ -105,8 +100,8 @@ export default {
     try {
         const targetUrlObj = new URL(targetUrl);
         const proxyHeaders = new Headers(request.headers);
+        
         proxyHeaders.delete('Host');
-        proxyHeaders.delete('Origin');
         proxyHeaders.delete('Referer');
         proxyHeaders.delete('cf-connecting-ip');
         
@@ -133,17 +128,12 @@ export default {
             headers: proxyHeaders,
             redirect: 'manual'
         };
-
-        if (request.method !== 'GET' && request.method !== 'HEAD') {
-             requestInit.body = request.body;
+        if (['POST', 'PUT', 'PATCH'].includes(request.method)) {
+            requestInit.body = request.body;
         }
 
         const proxyRes = await fetch(targetUrl, requestInit);
         const responseHeaders = new Headers(proxyRes.headers);
-        
-        for (const [key, value] of Object.entries(corsHeaders)) {
-            responseHeaders.set(key, value);
-        }
 
         responseHeaders.delete('x-frame-options');
         responseHeaders.delete('content-security-policy');
@@ -153,9 +143,7 @@ export default {
         if (responseHeaders.has('location')) {
             const loc = responseHeaders.get('location');
             if (loc.startsWith('http')) {
-                responseHeaders.set('location', `/${loc}`);
-            } else if (loc.startsWith('/')) {
-                responseHeaders.set('location', `/${targetUrlObj.origin}${loc}`);
+                 responseHeaders.set('location', `${url.origin}/${loc}`);
             }
         }
         
@@ -167,28 +155,52 @@ export default {
             });
         }
 
-        // --- 8. 【极致顺畅的核心】利用 HTMLRewriter 注入 Base Tag，修复所有相对路径的 404 问题 ---
+        // --- 8. 【极致顺畅的核心】利用 HTMLRewriter 重写页面内所有链接 ---
         const contentType = responseHeaders.get('content-type') || '';
         if (contentType.includes('text/html')) {
             class BaseTagInjector {
                 element(element) {
-                    // 强制所有相对路径 (css, js, img) 以目标原始域名为基准进行请求，并通过我们的代理转发
                     element.prepend(`<base href="${url.origin}/${targetUrlObj.origin}/" />`, { html: true });
-                    
-                    // 强力拦截并重写网页内所有的点击行为，防止逃逸出代理域
+                    // 强力劫持原生 JS 请求
                     element.prepend(`<script>
-                        document.addEventListener('click', function(e) {
-                            const a = e.target.closest('a');
-                            if (a && a.href && a.href.startsWith('http') && !a.href.startsWith('${url.origin}')) {
-                                e.preventDefault();
-                                window.location.href = '${url.origin}/' + a.href;
+                        (function(){
+                            const _origin = '${url.origin}';
+                            function rewrite(u) {
+                                if(typeof u === 'string' && u.startsWith('http') && !u.startsWith(_origin)) return _origin + '/' + u;
+                                return u;
                             }
-                        }, true);
+                            const _fetch = window.fetch;
+                            window.fetch = function(req, init) {
+                                if(typeof req === 'string') req = rewrite(req);
+                                else if(req instanceof Request && req.url.startsWith('http') && !req.url.startsWith(_origin)) {
+                                    req = new Request(_origin + '/' + req.url, req);
+                                }
+                                return _fetch.call(window, req, init);
+                            };
+                            const _open = XMLHttpRequest.prototype.open;
+                            XMLHttpRequest.prototype.open = function(method, u, ...rest) {
+                                return _open.call(this, method, rewrite(u), ...rest);
+                            };
+                        })();
                     </script>`, { html: true });
                 }
             }
             
-            const rewriter = new HTMLRewriter().on('head', new BaseTagInjector());
+            class AttributeRewriter {
+                element(element) {
+                    ['href', 'src', 'action'].forEach(attr => {
+                        const val = element.getAttribute(attr);
+                        if (val && val.startsWith('http') && !val.startsWith(url.origin)) {
+                            element.setAttribute(attr, url.origin + '/' + val);
+                        }
+                    });
+                }
+            }
+            
+            const rewriter = new HTMLRewriter()
+                .on('head', new BaseTagInjector())
+                .on('a, link, img, script, iframe, form', new AttributeRewriter());
+                
             return rewriter.transform(new Response(proxyRes.body, {
                 status: proxyRes.status,
                 statusText: proxyRes.statusText,
@@ -373,4 +385,3 @@ function getGatewayHtml(hostname) {
 </body>
 </html>`;
 }
-
