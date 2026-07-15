@@ -1,43 +1,25 @@
-# Cloudflare 终极万能代理 (Worker 专版)
+# 完美解决方案：Cloudflare Pages 一体化部署
 
-你完全不需要使用 Hugging Face，也无需部署复杂的 Node.js 服务。
+你好！如果你在 Cloudflare 控制台找不到单独创建 Worker 的选项也没关系！
+我已经为你配置了 **Cloudflare Pages Advanced Mode**（高级模式）。
 
-**只需要一个纯粹的 Cloudflare Worker，即可完美解决所有外网访问、API 代理、CORS 跨域问题！**
+现在你可以**继续使用你之前的 Cloudflare Pages 部署方式**（无论是链接 GitHub，还是直接上传代码），
+一切都会完美工作，网页和 API 代理会融为一体！
 
-## 🚀 一分钟部署教程 (零成本)
+## 为什么现在可以了？
+我在项目的 `public/` 目录下新增了一个名为 `_worker.js` 的文件。
+当你把这个项目部署到 Cloudflare Pages 时：
+1. Cloudflare 会自动检测到这个 `_worker.js` 文件。
+2. 它会**自动把你的 Pages 变成一个全能的代理服务器**。
+3. 当你访问首页，它会给你返回网页。
+4. 当你访问 `/v1/chat/completions` 等 API 路径时，它会自动帮你把请求代理给外部服务器！
 
-1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)。
-2. 在左侧菜单找到 **Workers & Pages** -> 点击 **Create** -> **Create Worker**。
-3. 给你的 Worker 起个名字，点击 **Deploy**。
-4. 部署完成后，点击 **Edit Code** 进入代码编辑器。
-5. 将本项目中的 [`worker.js`](./worker.js) 里面的代码**全部复制**，粘贴覆盖掉网页上的默认代码。
-6. 点击右上角的 **Save and Deploy**。
-7. (可选) 在 Settings -> Triggers 中，为这个 Worker 绑定一个你自己的域名 (Custom Domains)。
+## 你现在需要做的事：
+只需把你在这个平台上看到的**最新代码**，重新同步/部署到你的 Cloudflare Pages 即可。
+（如果你是用 GitHub 部署的，只要把现在的代码 push 到 GitHub，Cloudflare 会自动重新构建）。
 
-## 🎯 功能与使用方法
+部署完成后，你的 `rorygpk.online` 就会瞬间变成：
+- `https://rorygpk.online/` -> 显示酷炫的代理网页（原来的样子）
+- `https://rorygpk.online/v1/chat/completions` -> 完美代理 OpenAI API，解决所有跨域问题！
 
-部署完成后，你将获得一个类似于 `https://your-worker.workers.dev` 的地址（或者你绑定的自定义域名）。
-
-### 1. 自动处理跨域 (CORS)
-无论你在任何本地前端项目（如 localhost:5173）中通过 fetch 调用这个代理，**永远不会出现跨域报错**，系统已全局强行放行 OPTIONS。
-
-### 2. AI API 极简直连
-我们内置了各大厂商的路由映射，你甚至不需要拼长 URL：
-- **OpenAI:** `https://你的域名/v1/chat/completions`
-- **Anthropic:** `https://你的域名/api/anthropic/v1/messages`
-- **Gemini:** `https://你的域名/api/gemini/v1beta/models/...`
-
-**调用示例 (直接替换官方 Base URL 即可):**
-```bash
-curl -X POST "https://你的域名/v1/chat/completions" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sk-YOUR_KEY" \
-  -d '{"model": "gpt-3.5-turbo", "messages": [{"role": "user", "content": "Hello!"}]}'
-```
-
-### 3. 万能 API / 网页代理 (套娃模式)
-对于任何没有内置预设的外网 API 或网页，直接在域名后面拼上完整的 URL 即可：
-- 代理 Github API: `https://你的域名/https://api.github.com/users`
-- 代理外网网页: `https://你的域名/https://www.google.com`
-
-**就是这么简单、纯粹、稳定！享受你的全能边缘节点吧！**
+现在你可以直接用你的 `rorygpk.online` 了，再试一次！
