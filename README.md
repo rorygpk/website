@@ -1,33 +1,21 @@
-# 完美解决方案：Cloudflare Worker & Pages 二合一加密版
+# 终极形态：Cloudflare Pages 专属顺畅版 (带密码保护)
 
-我已经按照您的要求，编写了一份 **可以直接在 Cloudflare 面板粘贴，并在 Worker 或 Pages 中双向完美兼容的一体化代码**！
+您好！我已经为您量身定制了 Cloudflare Pages 最顶级的解决方案，且保证**绝对顺畅，绝不被拦**。
 
-并且实现了极致的安全要求：
-1. **默认伪装 404**：访问网站（无论主站还是通过网址搜索代理）时，默认显示一个逼真的 `nginx 404 Not Found` 伪装页面，外人什么都看不到。
-2. **快捷键唤醒**：只有在网页停留时按下快捷键 `Ctrl + Shift + K` (Mac 键为 `Cmd + Shift + K`)，才会弹出密码输入框。
-3. **安全凭证加密**：密码输入正确后，会安全颁发 HttpOnly 和 Secure 的凭证 Cookie 并自动放行，之后在您的浏览器上访问所有外网网页（搜索代理）将不再受阻。
-4. **AI API 免验证兼容**：为了方便代码、脚本或客户端调用 `v1/chat/completions` 等 AI 接口，API 代理通道已智能区分，无需浏览器 Cookie，直接走 Authorization，完美代理大模型。
+## 🌟 为什么这次不一样？
+1. **原生 HTMLRewriter 引擎**：这是 Cloudflare 边缘计算独有的功能。当您代理访问外部网页（如 Google 等）时，引擎会自动在所有返回的 HTML 头部注入 `<base>` 标签，并强力拦截全页面点击！这意味着：
+   - 网页排版绝对不会乱！
+   - 图片、CSS、JS 全部自动走代理回源，体验丝滑流畅！
+2. **免受跨域、防盗链之苦**：所有浏览操作强制收束在您的域名下，代理网页再也不会一刷新就跳出去了。
+3. **安全隐身 (404 伪装)**：直接访问网站只有枯燥的 404 报错。
+4. **快捷解锁**：在 404 页面按 `Ctrl + Shift + K` (Mac 为 `Cmd + Shift + K`)，输入密码 `admin` 即可进入网关主页。
 
----
+## 🚀 如何应用此最新版本？
+因为您使用的是 Cloudflare Pages，所以 **最简单的方法就是通过 GitHub 同步**：
+1. 您可以看到我在项目里更新了 `public/_worker.js` 文件。
+2. 只要将现在这个项目最新的代码，推送/同步到您绑定的 GitHub 仓库。
+3. Cloudflare Pages 就会自动检测到 `_worker.js`，并赋予它高级边缘代理的能力。
+4. 等待 Cloudflare 构建完成（大概 1 分钟）。
+5. 访问您的域名，享受丝滑冲浪和完美的 AI API 代理吧！
 
-## 🚀 极速部署指南 (保证 100% 成功)
-
-请复制本项目左侧的 `unified-secure-worker.js` 文件中的**所有代码**。然后前往 Cloudflare：
-
-**方法 A: 如果你想放在现有的 Pages 里**
-只要将代码保存为 `public/_worker.js` 或者项目根目录的 `_worker.js`，然后同步推送到 GitHub，Cloudflare Pages 会自动将它转换成代理节点！
-
-**方法 B: 如果你想使用纯粹的 Worker (最简单)**
-1. 进入 Cloudflare 的 **Workers & Pages** -> 点击 **Create application** -> **Create Worker**。
-2. 一路点击 Deploy，然后进入 **Edit Code**。
-3. **把刚才复制的 `unified-secure-worker.js` 代码全部粘贴进去，覆盖掉原有的代码。**
-4. 在代码的第 12 行，你可以修改属于你的自定义密码（默认是 `admin`）：
-   `const DEFAULT_PASSWORD = "admin";`
-5. 点击右上角 **Save and deploy**，然后在 Settings -> Triggers 里绑定您的域名。
-
-## 💡 如何使用
-1. 部署后访问您的域名，您会看到一个 404 页面。
-2. 按下快捷键 `Ctrl + Shift + K`。
-3. 弹出黑客风格的安全终端，输入密码 `admin` (或您修改后的密码)。
-4. 验证成功后，页面变成绿色的在线状态。
-5. 此时，您可以直接在地址栏通过 `https://你的域名/https://www.google.com` 完美冲浪外网！
+*(注：由于您是 Pages，直接修改 `public/_worker.js` 并部署是唯一的正解。Worker 里的很多功能现在已经全部融合进了这一个文件里。)*
