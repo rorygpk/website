@@ -1,25 +1,33 @@
-# 完美解决方案：Cloudflare Pages 一体化部署
+# 完美解决方案：Cloudflare Worker & Pages 二合一加密版
 
-你好！如果你在 Cloudflare 控制台找不到单独创建 Worker 的选项也没关系！
-我已经为你配置了 **Cloudflare Pages Advanced Mode**（高级模式）。
+我已经按照您的要求，编写了一份 **可以直接在 Cloudflare 面板粘贴，并在 Worker 或 Pages 中双向完美兼容的一体化代码**！
 
-现在你可以**继续使用你之前的 Cloudflare Pages 部署方式**（无论是链接 GitHub，还是直接上传代码），
-一切都会完美工作，网页和 API 代理会融为一体！
+并且实现了极致的安全要求：
+1. **默认伪装 404**：访问网站（无论主站还是通过网址搜索代理）时，默认显示一个逼真的 `nginx 404 Not Found` 伪装页面，外人什么都看不到。
+2. **快捷键唤醒**：只有在网页停留时按下快捷键 `Ctrl + Shift + K` (Mac 键为 `Cmd + Shift + K`)，才会弹出密码输入框。
+3. **安全凭证加密**：密码输入正确后，会安全颁发 HttpOnly 和 Secure 的凭证 Cookie 并自动放行，之后在您的浏览器上访问所有外网网页（搜索代理）将不再受阻。
+4. **AI API 免验证兼容**：为了方便代码、脚本或客户端调用 `v1/chat/completions` 等 AI 接口，API 代理通道已智能区分，无需浏览器 Cookie，直接走 Authorization，完美代理大模型。
 
-## 为什么现在可以了？
-我在项目的 `public/` 目录下新增了一个名为 `_worker.js` 的文件。
-当你把这个项目部署到 Cloudflare Pages 时：
-1. Cloudflare 会自动检测到这个 `_worker.js` 文件。
-2. 它会**自动把你的 Pages 变成一个全能的代理服务器**。
-3. 当你访问首页，它会给你返回网页。
-4. 当你访问 `/v1/chat/completions` 等 API 路径时，它会自动帮你把请求代理给外部服务器！
+---
 
-## 你现在需要做的事：
-只需把你在这个平台上看到的**最新代码**，重新同步/部署到你的 Cloudflare Pages 即可。
-（如果你是用 GitHub 部署的，只要把现在的代码 push 到 GitHub，Cloudflare 会自动重新构建）。
+## 🚀 极速部署指南 (保证 100% 成功)
 
-部署完成后，你的 `rorygpk.online` 就会瞬间变成：
-- `https://rorygpk.online/` -> 显示酷炫的代理网页（原来的样子）
-- `https://rorygpk.online/v1/chat/completions` -> 完美代理 OpenAI API，解决所有跨域问题！
+请复制本项目左侧的 `unified-secure-worker.js` 文件中的**所有代码**。然后前往 Cloudflare：
 
-现在你可以直接用你的 `rorygpk.online` 了，再试一次！
+**方法 A: 如果你想放在现有的 Pages 里**
+只要将代码保存为 `public/_worker.js` 或者项目根目录的 `_worker.js`，然后同步推送到 GitHub，Cloudflare Pages 会自动将它转换成代理节点！
+
+**方法 B: 如果你想使用纯粹的 Worker (最简单)**
+1. 进入 Cloudflare 的 **Workers & Pages** -> 点击 **Create application** -> **Create Worker**。
+2. 一路点击 Deploy，然后进入 **Edit Code**。
+3. **把刚才复制的 `unified-secure-worker.js` 代码全部粘贴进去，覆盖掉原有的代码。**
+4. 在代码的第 12 行，你可以修改属于你的自定义密码（默认是 `admin`）：
+   `const DEFAULT_PASSWORD = "admin";`
+5. 点击右上角 **Save and deploy**，然后在 Settings -> Triggers 里绑定您的域名。
+
+## 💡 如何使用
+1. 部署后访问您的域名，您会看到一个 404 页面。
+2. 按下快捷键 `Ctrl + Shift + K`。
+3. 弹出黑客风格的安全终端，输入密码 `admin` (或您修改后的密码)。
+4. 验证成功后，页面变成绿色的在线状态。
+5. 此时，您可以直接在地址栏通过 `https://你的域名/https://www.google.com` 完美冲浪外网！
