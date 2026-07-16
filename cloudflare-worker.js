@@ -15,21 +15,24 @@ export default {
   }
 };
 
+function handleCORS(request) {
+    const headers = new Headers();
+    headers.set('Access-Control-Allow-Origin', request.headers.get('Origin') || '*');
+    headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD');
+    headers.set('Access-Control-Allow-Headers', request.headers.get('Access-Control-Request-Headers') || '*');
+    headers.set('Access-Control-Allow-Credentials', 'true');
+    return headers;
+}
+
 async function handleRequest(request, env) {
     const url = new URL(request.url);
     let pathStr = url.pathname;
     const search = url.search;
     const password = (env && env.ACCESS_PASSWORD) ? env.ACCESS_PASSWORD : DEFAULT_PASSWORD;
 
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH',
-      'Access-Control-Allow-Headers': '*',
-      'Access-Control-Allow-Credentials': 'true',
-    };
-
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders });
+      const cors = handleCORS(request);
+      return new Response(null, { status: 204, headers: cors });
     }
 
     // --- 1. 验证接口 ---
@@ -37,18 +40,19 @@ async function handleRequest(request, env) {
         try {
             const body = await request.json();
             if (body.password === password) {
+                const cors = handleCORS(request);
+                cors.set('Content-Type', 'application/json');
+                cors.set('Set-Cookie', `${COOKIE_NAME}=${password}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
                 return new Response(JSON.stringify({ success: true }), {
                     status: 200,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Set-Cookie': `${COOKIE_NAME}=${password}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`,
-                        ...corsHeaders
-                    }
+                    headers: cors
                 });
             }
-            return new Response(JSON.stringify({ success: false }), { status: 401, headers: corsHeaders });
+            const cors = handleCORS(request);
+            cors.set('Content-Type', 'application/json');
+            return new Response(JSON.stringify({ success: false }), { status: 401, headers: cors });
         } catch (e) {
-            return new Response("Bad", { status: 400 });
+            return new Response("Bad Request", { status: 400 });
         }
     }
 
@@ -75,13 +79,27 @@ async function handleRequest(request, env) {
     }
 
     // --- 3. Web 网页代理解析 ---
-    if (!targetUrl) {
+    if (!targetUrl && pathStr !== '/') {
       let decodedPath = decodeURIComponent(pathStr.slice(1));
       if (decodedPath.startsWith('proxy/')) {
           decodedPath = decodedPath.slice(6);
       }
+      
       if (decodedPath.startsWith('http://') || decodedPath.startsWith('https://')) {
           targetUrl = decodedPath + search;
+      } else {
+          // 核心修复：处理网站由于 <base> 标签失效导致的相对路径资源 404 (CSS, JS, 图片)
+          const referer = request.headers.get('Referer');
+          if (referer) {
+              try {
+                  const refUrl = new URL(referer);
+                  let refPath = decodeURIComponent(refUrl.pathname.slice(1));
+                  if (refPath.startsWith('http://') || refPath.startsWith('https://')) {
+                      const targetBaseUrl = new URL(refPath);
+                      targetUrl = targetBaseUrl.origin + pathStr + search;
+                  }
+              } catch(e) {}
+          }
       }
     }
 
@@ -90,17 +108,17 @@ async function handleRequest(request, env) {
     const isAuthenticated = cookies.includes(`${COOKIE_NAME}=${password}`);
 
     if (!isAiApi && !isAuthenticated) {
-        // 未认证时返回逼真的 404
+        // 未认证时返回极度逼真的 404
         return new Response(get404Html(), { 
             status: 404, 
-            headers: { 'Content-Type': 'text/html;charset=UTF-8', ...corsHeaders } 
+            headers: { 'Content-Type': 'text/html;charset=UTF-8' } 
         });
     }
 
     // --- 5. 代理主页 ---
     if (!targetUrl && (pathStr === '/' || pathStr === '')) {
         return new Response(getGatewayHtml(url.hostname), {
-            headers: { 'Content-Type': 'text/html;charset=UTF-8', ...corsHeaders }
+            headers: { 'Content-Type': 'text/html;charset=UTF-8' }
         });
     }
 
@@ -132,9 +150,10 @@ async function handleRequest(request, env) {
 
         const proxyRes = await fetch(targetUrl, requestInit);
         const responseHeaders = new Headers(proxyRes.headers);
-        for (const [key, value] of Object.entries(corsHeaders)) {
-            responseHeaders.set(key, value);
-        }
+        
+        const cors = handleCORS(request);
+        cors.forEach((value, key) => responseHeaders.set(key, value));
+        
         return new Response(proxyRes.body, {
             status: proxyRes.status,
             statusText: proxyRes.statusText,
@@ -157,7 +176,7 @@ async function handleRequest(request, env) {
     proxyHeaders.set('Origin', targetUrlObj.origin);
     proxyHeaders.set('Referer', targetUrlObj.href);
     
-    if (!proxyHeaders.has('User-Agent')) {
+    if (!proxyHeaders.has('User-Agent') || proxyHeaders.get('User-Agent').includes('Cloudflare')) {
          proxyHeaders.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
     }
     
@@ -187,9 +206,9 @@ async function handleRequest(request, env) {
     responseHeaders.delete('content-security-policy');
     responseHeaders.delete('content-security-policy-report-only');
     responseHeaders.delete('clear-site-data');
-    for (const [key, value] of Object.entries(corsHeaders)) {
-        responseHeaders.set(key, value);
-    }
+    
+    const cors = handleCORS(request);
+    cors.forEach((value, key) => responseHeaders.set(key, value));
 
     if (responseHeaders.has('location')) {
         const loc = responseHeaders.get('location');
@@ -224,21 +243,25 @@ async function handleRequest(request, env) {
                     (function(){
                         const _origFetch = window.fetch;
                         window.fetch = function(req, init) {
-                            let u = typeof req === 'string' ? req : req.url;
-                            if (u.startsWith('http')) {
-                                if (!u.startsWith('${url.origin}')) u = '${url.origin}/' + u;
-                            } else if (u.startsWith('/')) {
-                                u = '${url.origin}/${targetUrlObj.origin}' + u;
+                            let u = typeof req === 'string' ? req : (req instanceof Request ? req.url : req);
+                            if (typeof u === 'string') {
+                                if (u.startsWith('http')) {
+                                    if (!u.startsWith('${url.origin}')) u = '${url.origin}/' + u;
+                                } else if (u.startsWith('/')) {
+                                    u = '${url.origin}/${targetUrlObj.origin}' + u;
+                                }
                             }
                             if (typeof req === 'string') return _origFetch.call(this, u, init);
                             else return _origFetch.call(this, new Request(u, req), init);
                         };
                         const _origOpen = XMLHttpRequest.prototype.open;
                         XMLHttpRequest.prototype.open = function(method, u, ...args) {
-                            if (u.startsWith('http')) {
-                                if (!u.startsWith('${url.origin}')) u = '${url.origin}/' + u;
-                            } else if (u.startsWith('/')) {
-                                u = '${url.origin}/${targetUrlObj.origin}' + u;
+                            if (typeof u === 'string') {
+                                if (u.startsWith('http')) {
+                                    if (!u.startsWith('${url.origin}')) u = '${url.origin}/' + u;
+                                } else if (u.startsWith('/')) {
+                                    u = '${url.origin}/${targetUrlObj.origin}' + u;
+                                }
                             }
                             return _origOpen.call(this, method, u, ...args);
                         };
