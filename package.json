@@ -4,9 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "vite build && cp -r dist build"
+    "dev": "wrangler dev worker.js --port 3000 --local",
+    "build": "vite build && cp -r dist build",
+    "preview": "vite preview"
   },
   "dependencies": {
     "vite": "^6.2.3"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
   }
 }

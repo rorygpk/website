@@ -10,7 +10,7 @@ export default {
     try {
       return await handleRequest(request, env);
     } catch (e) {
-      return new Response("Internal Server Error", { status: 500 });
+      return new Response("Internal Server Error: " + e.message, { status: 500 });
     }
   }
 };
@@ -29,10 +29,7 @@ async function handleRequest(request, env) {
 
     // 0. 全局跨域预检处理
     if (request.method === 'OPTIONS') {
-        const reqHeaders = request.headers.get('Access-Control-Request-Headers');
-        const finalHeaders = { ...corsHeaders };
-        if (reqHeaders) finalHeaders['Access-Control-Allow-Headers'] = reqHeaders;
-        return new Response(null, { status: 204, headers: finalHeaders });
+        return new Response(null, { headers: corsHeaders });
     }
 
     // 1. AI API 纯净无损代理 (完全不经过 Auth)
@@ -57,7 +54,7 @@ async function handleRequest(request, env) {
             newHeaders.delete('x-forwarded-for');
             newHeaders.delete('x-real-ip');
 
-            const init = { method: request.method, headers: newHeaders, redirect: 'follow' };
+            const init = { method: request.method, headers: newHeaders, redirect: 'follow', duplex: 'half' };
             if (request.body && !['GET', 'HEAD'].includes(request.method.toUpperCase())) {
                 init.body = request.body;
             }
@@ -66,9 +63,14 @@ async function handleRequest(request, env) {
             const proxyRes = await fetch(proxyReq);
             
             const responseHeaders = new Headers(proxyRes.headers);
-            for (const [k, v] of Object.entries(corsHeaders)) responseHeaders.set(k, v);
+            for (const [k, v] of Object.entries(corsHeaders)) {
+                responseHeaders.set(k, v);
+            }
+            
             return new Response(proxyRes.body, {
-                status: proxyRes.status, statusText: proxyRes.statusText, headers: responseHeaders
+                status: proxyRes.status,
+                statusText: proxyRes.statusText,
+                headers: responseHeaders
             });
         }
     }
@@ -95,14 +97,76 @@ async function handleRequest(request, env) {
 
     if (!isAuthenticated) {
         return new Response(
-`<html>
-<head><title>404 Not Found</title></head>
+`<!DOCTYPE html>
+<html>
+<head>
+    <title>404 Not Found</title>
+    <style>
+        body { font-family: sans-serif; background: #fff; color: #000; text-align: center; padding-top: 50px; margin: 0; }
+        h1 { font-size: 24px; font-weight: normal; }
+        hr { border: 0; border-top: 1px solid #ccc; max-width: 600px; margin: 20px auto; }
+        #secret-trigger { cursor: default; user-select: none; }
+        #auth-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 9999;
+        }
+        #auth-box { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); text-align: left; }
+        #auth-box h3 { margin-top: 0; }
+        #auth-box input { padding: 8px; width: 200px; margin-right: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        #auth-box button { padding: 8px 16px; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+    </style>
+</head>
 <body>
-<center><h1>404 Not Found</h1></center>
-<hr><center>nginx</center>
+    <h1>404 Not Found</h1>
+    <hr>
+    <p id="secret-trigger">nginx</p>
+
+    <div id="auth-overlay">
+        <div id="auth-box">
+            <h3>System Access</h3>
+            <input type="password" id="auth-pwd" placeholder="Enter passkey">
+            <button id="auth-btn">Login</button>
+        </div>
+    </div>
+
+    <script>
+        function showAuth() {
+            document.getElementById('auth-overlay').style.display = 'flex';
+            const input = document.getElementById('auth-pwd');
+            input.focus();
+            
+            const submit = () => {
+                const pwd = input.value;
+                if (pwd) window.location.href = '/__auth/' + encodeURIComponent(pwd);
+            };
+            
+            document.getElementById('auth-btn').onclick = submit;
+            input.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                showAuth();
+            }
+        });
+
+        let clickCount = 0;
+        let clickTimer;
+        document.getElementById('secret-trigger').addEventListener('click', function() {
+            clickCount++;
+            clearTimeout(clickTimer);
+            if (clickCount >= 3) {
+                clickCount = 0;
+                showAuth();
+            } else {
+                clickTimer = setTimeout(() => clickCount = 0, 500);
+            }
+        });
+    </script>
 </body>
 </html>`, 
-            { status: 404, headers: { 'Content-Type': 'text/html;charset=UTF-8' } }
+             { status: 404, headers: { 'Content-Type': 'text/html;charset=UTF-8' } }
         );
     }
 
@@ -149,8 +213,8 @@ async function handleRequest(request, env) {
     proxyHeaders.set('Referer', targetUrlObj.origin + '/');
     
     const ua = proxyHeaders.get('User-Agent') || '';
-    if (!ua || ua.includes('Cloudflare')) {
-         proxyHeaders.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+    if (!ua || ua.includes('Cloudflare')) { 
+        proxyHeaders.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
     }
     
     proxyHeaders.set('Accept-Encoding', 'identity');
@@ -161,12 +225,11 @@ async function handleRequest(request, env) {
         else proxyHeaders.delete('Cookie');
     }
     
-    const requestInit = { method: request.method, headers: proxyHeaders, redirect: 'manual' };
+    const requestInit = { method: request.method, headers: proxyHeaders, redirect: 'manual', duplex: 'half' };
     if (request.body && !['GET', 'HEAD'].includes(request.method.toUpperCase())) requestInit.body = request.body;
 
     const proxyRes = await fetch(targetWebUrl, requestInit);
     const responseHeaders = new Headers(proxyRes.headers);
-
     responseHeaders.delete('x-frame-options');
     responseHeaders.delete('content-security-policy');
     responseHeaders.delete('content-security-policy-report-only');
@@ -212,9 +275,7 @@ async function handleRequest(request, env) {
 }
 
 function getGatewayHtml(hostname) {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
+  return `<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gateway Active</title>
@@ -257,6 +318,5 @@ function getGatewayHtml(hostname) {
             <li>xAI (Grok): <code>https://${hostname}/api/xai</code></li>
         </ul>
     </div>
-</body>
-</html>`;
+</body></html>`;
 }
