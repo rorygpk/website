@@ -29,7 +29,10 @@ async function handleRequest(request, env) {
 
     // 0. 全局跨域预检处理
     if (request.method === 'OPTIONS') {
-        return new Response(null, { headers: corsHeaders });
+        const reqHeaders = request.headers.get('Access-Control-Request-Headers');
+        const finalHeaders = { ...corsHeaders };
+        if (reqHeaders) finalHeaders['Access-Control-Allow-Headers'] = reqHeaders;
+        return new Response(null, { status: 204, headers: finalHeaders });
     }
 
     // 1. AI API 纯净无损代理 (完全不经过 Auth)
@@ -217,7 +220,15 @@ async function handleRequest(request, env) {
         proxyHeaders.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
     }
     
-    proxyHeaders.set('Accept-Encoding', 'identity');
+    // Optimizing speed vs compatibility
+    const acceptHeader = proxyHeaders.get('Accept') || '';
+    if (acceptHeader.includes('text/html')) {
+        // We must receive uncompressed HTML for HTMLRewriter
+        proxyHeaders.set('Accept-Encoding', 'identity');
+    } else {
+        // Pass through browser's encoding for speed
+    }
+    
     let cookieHeader = proxyHeaders.get('Cookie');
     if (cookieHeader) {
         cookieHeader = cookieHeader.split(';').filter(c => !c.trim().startsWith(COOKIE_NAME + '=')).join(';');
@@ -251,13 +262,16 @@ async function handleRequest(request, env) {
     if (contentType.includes('text/html')) {
         class AttributeRewriter {
             element(element) {
+                element.removeAttribute('integrity');
+                
                 ['href', 'src', 'action'].forEach(attr => {
                     const val = element.getAttribute(attr);
                     if (val) {
                         if (val.startsWith('http://') || val.startsWith('https://')) element.setAttribute(attr, url.origin + '/' + val);
                         else if (val.startsWith('//')) element.setAttribute(attr, url.origin + '/https:' + val);
                         else if (val.startsWith('/')) element.setAttribute(attr, url.origin + '/' + targetUrlObj.origin + val);
-                    }
+                    
+            }
                 });
             }
         }

@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev worker.js --port 3000 --local",
+    "dev": "node start.cjs",
     "build": "vite build && cp -r dist build",
     "preview": "vite preview"
   },
@@ -12,6 +12,6 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
-    "wrangler": "^3.0.0"
+    "wrangler": "^4.0.0"
   }
 }
