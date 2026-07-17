@@ -1,13 +1,30 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>404 Not Found</title>
+    <style>
+        body { font-family: sans-serif; background: #fff; color: #000; text-align: center; padding-top: 50px; }
+        h1 { font-size: 24px; font-weight: normal; }
+        hr { border: 0; border-top: 1px solid #ccc; max-width: 600px; margin: 20px auto; }
+    </style>
+</head>
+<body>
+    <h1>404 Not Found</h1>
+    <hr>
+    <p>nginx</p>
 
+    <script>
+        // Listen for Ctrl + Shift + K (or Cmd + Shift + K on Mac)
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                const pwd = prompt("System Access required. Enter passkey:");
+                if (pwd) {
+                    // Send to the auth endpoint
+                    window.location.href = '/__auth/' + encodeURIComponent(pwd);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
