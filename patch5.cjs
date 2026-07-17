@@ -1,4 +1,10 @@
-<!DOCTYPE html>
+const fs = require('fs');
+let code = fs.readFileSync('worker.js', 'utf8');
+
+const regex = /return new Response\(`<!DOCTYPE html>[\s\S]*?<\/html>`, \s*\{\s*status:\s*404,\s*headers:\s*\{\s*'Content-Type':\s*'text\/html;charset=UTF-8'\s*\}\s*\}\s*\);/m;
+
+const newStr = `return new Response(
+\`<!DOCTYPE html>
 <html>
 <head>
     <title>404 Not Found</title>
@@ -44,4 +50,14 @@
         });
     </script>
 </body>
-</html>
+</html>\`, 
+             { status: 404, headers: { 'Content-Type': 'text/html;charset=UTF-8' } }
+        );`;
+
+if (regex.test(code)) {
+    code = code.replace(regex, newStr);
+    fs.writeFileSync('worker.js', code);
+    console.log("Patched successfully!");
+} else {
+    console.log("Not found.");
+}
