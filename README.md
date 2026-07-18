@@ -1,21 +1,14 @@
-# 终极形态：Cloudflare Pages 专属顺畅版 (带密码保护)
+# Enterprise Internet Gateway
 
-您好！我已经为您量身定制了 Cloudflare Pages 最顶级的解决方案，且保证**绝对顺畅，绝不被拦**。
+Welcome to the Enterprise Internet Gateway project. This project is a highly secure, modular, and performant gateway designed for authorized internal use on the Cloudflare Workers edge runtime.
 
-## 🌟 为什么这次不一样？
-1. **原生 HTMLRewriter 引擎**：这是 Cloudflare 边缘计算独有的功能。当您代理访问外部网页（如 Google 等）时，引擎会自动在所有返回的 HTML 头部注入 `<base>` 标签，并强力拦截全页面点击！这意味着：
-   - 网页排版绝对不会乱！
-   - 图片、CSS、JS 全部自动走代理回源，体验丝滑流畅！
-2. **免受跨域、防盗链之苦**：所有浏览操作强制收束在您的域名下，代理网页再也不会一刷新就跳出去了。
-3. **安全隐身 (404 伪装)**：直接访问网站只有枯燥的 404 报错。
-4. **快捷解锁**：在 404 页面按 `Ctrl + Shift + K` (Mac 为 `Cmd + Shift + K`)，输入密码 `admin` 即可进入网关主页。
+## Core Pillars
+1. **Security & Zero Trust**: Strict dynamic authentication disguised as a simple 404 page. High data protection and sensitive data redaction.
+2. **Modern Web Compatibility**: Full reverse proxy for React, Vue, WebSocket, SSE, and modern web paradigms.
+3. **AI Gateway**: Unified access to AI models (OpenAI, Gemini, Claude, DeepSeek) with standardized billing and routing.
+4. **Download Gateway**: Chunked transfer and range requests for seamless file delivery.
 
-## 🚀 如何应用此最新版本？
-因为您使用的是 Cloudflare Pages，所以 **最简单的方法就是通过 GitHub 同步**：
-1. 您可以看到我在项目里更新了 `public/_worker.js` 文件。
-2. 只要将现在这个项目最新的代码，推送/同步到您绑定的 GitHub 仓库。
-3. Cloudflare Pages 就会自动检测到 `_worker.js`，并赋予它高级边缘代理的能力。
-4. 等待 Cloudflare 构建完成（大概 1 分钟）。
-5. 访问您的域名，享受丝滑冲浪和完美的 AI API 代理吧！
-
-*(注：由于您是 Pages，直接修改 `public/_worker.js` 并部署是唯一的正解。Worker 里的很多功能现在已经全部融合进了这一个文件里。)*
+## Documentation
+- `SRS.md`: Software Requirements Specification
+- `ARCHITECTURE.md`: Architecture & Module Breakdown
+- `INTERFACE_DESIGN.md`: Interface Contracts, Test Strategies, and 404 Dynamic Defence details.

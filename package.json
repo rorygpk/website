@@ -5,13 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "node start.cjs",
-    "build": "vite build && cp -r dist build",
+    "build": "npx wrangler deploy --dry-run --outdir dist",
     "preview": "vite preview"
   },
   "dependencies": {
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260718.1",
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2",
     "wrangler": "^4.0.0"
   }
 }
