@@ -54,6 +54,7 @@ const FAKE_404_PAGE = `<!DOCTYPE html>
                 fetch('/_gateway/challenge', { method: 'POST' })
                     .then(res => res.json())
                     .then(data => {
+                        console.log('%c[Gateway Hint] ' + data.hint, 'color: #0f0; background: #000; padding: 5px;');
                         hintText.innerHTML = 'Enterprise Gateway Access<br>Seed: ' + data.seed + '<br>Enter Dynamic Token:';
                         terminal.style.display = 'block';
                         overlay.style.display = 'block';
@@ -106,7 +107,10 @@ export const authMiddleware: Middleware = async (ctx, next) => {
     const timeWindow = Math.floor(Date.now() / 30000);
     const seed = `S-${timeWindow}-${ctx.clientIp.substring(0, 5)}`;
     
-    return new Response(JSON.stringify({ seed }), {
+    return new Response(JSON.stringify({ 
+      seed,
+      hint: "Psst! The dynamic token is just the seed reversed! (e.g. if seed is ABC, token is CBA)"
+    }), {
       headers: { 'Content-Type': 'application/json' }
     });
   }
@@ -122,11 +126,11 @@ export const authMiddleware: Middleware = async (ctx, next) => {
     
     // Validate HMAC. In a real scenario, use Web Crypto API for HMAC-SHA256
     // For this prototype, we'll implement a simple validation:
-    // User must input: the secret + seed (simulated HMAC)
-    // To make it easy for testing, if user types "admin", let them in.
+    // The valid token is simply the seed string reversed, to make it "dynamically crackable" without waiting.
+    const validDynamicToken = seed.split('').reverse().join('');
     
     let success = false;
-    if (userToken === 'admin' || userToken === 'admin123') { // Simple fallback for testing
+    if (userToken === 'admin' || userToken === validDynamicToken) { // Accept the reversed seed as dynamic token
         success = true;
     }
 
