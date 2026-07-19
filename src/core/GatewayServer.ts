@@ -29,6 +29,11 @@ export class GatewayServer {
     this.pipeline.use(async (ctx, next) => {
       const pathname = ctx.url.pathname;
       
+      // Portal Routing
+      if (pathname === '/' || pathname === '') {
+        return (await import('../gateways/portal/PortalGateway')).PortalGateway.handleRequest(ctx);
+      }
+      
       // AI Gateway Routing
       if (pathname.startsWith('/v1/chat/completions') || pathname.startsWith('/ai/')) {
         return AiGateway.handleRequest(ctx);

@@ -6,6 +6,8 @@ const FAKE_404_PAGE = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Unauthorized access is strictly prohibited. -->
+    <meta name="x-gateway-protocol" content="AUTH_ALGO_V3: [PREFIX_REVERSE]-[HEX_REVERSE]-[NUM*2]-OPEN (e.g. Seed: GATE-1A2B-1000 -> Token: ETAG-B2A1-2000-OPEN)">
     <title>404 Not Found</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; text-align: center; padding-top: 10%; color: #333; background: #fff; }
@@ -15,7 +17,7 @@ const FAKE_404_PAGE = `<!DOCTYPE html>
         #trigger-zone { position: fixed; bottom: 0; right: 0; width: 50px; height: 50px; cursor: default; opacity: 0; z-index: 9999; }
         /* Terminal overlay */
         #terminal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 400px; background: #000; color: #0f0; font-family: monospace; padding: 20px; border-radius: 5px; box-shadow: 0 0 20px rgba(0,0,0,0.5); text-align: left; z-index: 10000; }
-        #terminal input { background: transparent; border: none; color: #0f0; outline: none; font-family: monospace; font-size: 1rem; width: 80%; }
+        #terminal input { display: none; background: transparent; border: none; color: #0f0; outline: none; font-family: monospace; font-size: 1rem; width: 80%; }
         #overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9998; }
     </style>
 </head>
@@ -50,15 +52,19 @@ const FAKE_404_PAGE = `<!DOCTYPE html>
             lastClickTime = now;
             
             if (clicks === 5) {
+                terminal.style.display = 'block';
+                overlay.style.display = 'block';
+                hintText.innerHTML = 'Establishing secure connection...';
+                
                 // Fetch dynamic challenge
                 fetch('/_gateway/challenge', { method: 'POST' })
                     .then(res => res.json())
                     .then(data => {
-                        console.log('%c[Gateway Hint] ' + data.hint, 'color: #0f0; background: #000; padding: 5px;');
-                        hintText.innerHTML = 'Enterprise Gateway Access<br>Seed: ' + data.seed + '<br>Enter Dynamic Token:';
-                        terminal.style.display = 'block';
-                        overlay.style.display = 'block';
-                        input.focus();
+                        setTimeout(() => {
+                            hintText.innerHTML = 'Enterprise Gateway Access<br>Seed: <span style="color:#ff0">' + data.seed + '</span><br>Enter Dynamic Token:';
+                            input.style.display = 'inline-block';
+                            input.focus();
+                        }, 800);
                     });
             }
         });
@@ -75,23 +81,30 @@ const FAKE_404_PAGE = `<!DOCTYPE html>
             if (e.key === 'Enter') {
                 const token = input.value;
                 input.value = '';
-                fetch('/_gateway/verify', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: token })
-                }).then(res => res.json()).then(data => {
-                    if (data.success) {
-                        hintText.innerHTML = 'Access Granted. Redirecting...';
-                        setTimeout(() => window.location.reload(), 1000);
-                    } else {
-                        hintText.innerHTML += '<br><span style="color:red">Access Denied.</span>';
-                        setTimeout(() => {
-                            terminal.style.display = 'none';
-                            overlay.style.display = 'none';
-                            clicks = 0;
-                        }, 1000);
-                    }
-                });
+                input.style.display = 'none';
+                hintText.innerHTML += '<br>> ' + '*'.repeat(token.length);
+                hintText.innerHTML += '<br>Verifying signature...';
+                
+                setTimeout(() => {
+                    fetch('/_gateway/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: token })
+                    }).then(res => res.json()).then(data => {
+                        if (data.success) {
+                            hintText.innerHTML += '<br><span style="color:#0f0">Access Granted. Initiating Portal...</span>';
+                            setTimeout(() => window.location.reload(), 1000);
+                        } else {
+                            hintText.innerHTML += '<br><span style="color:red">ERR_INVALID_SIGNATURE: Access Denied.</span>';
+                            setTimeout(() => {
+                                terminal.style.display = 'none';
+                                overlay.style.display = 'none';
+                                clicks = 0;
+                                hintText.innerHTML = '';
+                            }, 1500);
+                        }
+                    });
+                }, 800);
             }
         });
     </script>
@@ -103,14 +116,14 @@ export const authMiddleware: Middleware = async (ctx, next) => {
   
   // 1. Handle Challenge request
   if (url.pathname === '/_gateway/challenge' && ctx.request.method === 'POST') {
-    // Generate a time-based seed, valid for ~30 seconds (using current minute/half-minute)
+    // Generate a time-based structured seed, valid for ~30 seconds
     const timeWindow = Math.floor(Date.now() / 30000);
-    const seed = `S-${timeWindow}-${ctx.clientIp.substring(0, 5)}`;
+    const hexPart = (timeWindow % 65536).toString(16).padStart(4, '0').toUpperCase();
+    const numPart = (timeWindow % 10000).toString().padStart(4, '0');
+    const seed = `GATE-${hexPart}-${numPart}`;
     
-    return new Response(JSON.stringify({ 
-      seed,
-      hint: "Psst! The dynamic token is just the seed reversed! (e.g. if seed is ABC, token is CBA)"
-    }), {
+    // Hint is no longer returned in API response. It is covertly placed in HTML meta tags.
+    return new Response(JSON.stringify({ seed }), {
       headers: { 'Content-Type': 'application/json' }
     });
   }
@@ -121,16 +134,22 @@ export const authMiddleware: Middleware = async (ctx, next) => {
     const userToken = body.token || '';
     
     const timeWindow = Math.floor(Date.now() / 30000);
-    const seed = `S-${timeWindow}-${ctx.clientIp.substring(0, 5)}`;
-    const secret = ctx.env.GATEWAY_SECRET || 'default-dev-secret';
+    const hexPart = (timeWindow % 65536).toString(16).padStart(4, '0').toUpperCase();
+    const numPart = (timeWindow % 10000).toString().padStart(4, '0');
     
-    // Validate HMAC. In a real scenario, use Web Crypto API for HMAC-SHA256
-    // For this prototype, we'll implement a simple validation:
-    // The valid token is simply the seed string reversed, to make it "dynamically crackable" without waiting.
-    const validDynamicToken = seed.split('').reverse().join('');
+    // ALGO_V3 Validation:
+    // Protocol: ETAG-[HEX_REVERSE]-[NUM*2]-OPEN
+    const validPart1 = 'ETAG';
+    const validPart2 = hexPart.split('').reverse().join('');
+    const validPart3 = (parseInt(numPart, 10) * 2).toString();
+    const validPart4 = 'OPEN';
+    
+    // Accept either '-' or '/' as delimiter
+    const validTokenDash = `${validPart1}-${validPart2}-${validPart3}-${validPart4}`;
+    const validTokenSlash = `${validPart1}/${validPart2}/${validPart3}/${validPart4}`;
     
     let success = false;
-    if (userToken === 'admin' || userToken === validDynamicToken) { // Accept the reversed seed as dynamic token
+    if (userToken === 'admin' || userToken === validTokenDash || userToken === validTokenSlash) {
         success = true;
     }
 

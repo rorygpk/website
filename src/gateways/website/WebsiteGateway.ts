@@ -30,24 +30,49 @@ export class WebsiteGateway {
     }
 
     try {
+      // Target URL processing
       const targetUrl = new URL(targetUrlStr);
       
-      // Clean up headers
+      // ==========================================
+      // ADVANCED CAMOUFLAGE ENGINE (反封锁引擎)
+      // ==========================================
       const proxyHeaders = new Headers(ctx.request.headers);
-      proxyHeaders.delete('Host');
-      proxyHeaders.delete('Cookie'); // Strip our gateway cookies
       
-      // Pass through user-agent to avoid blocking
-      const ua = proxyHeaders.get('User-Agent');
-      if (!ua || ua.includes('Cloudflare') || ua.includes('curl')) {
+      // 1. Strip structural CF headers that expose the proxy
+      proxyHeaders.delete('cf-connecting-ip');
+      proxyHeaders.delete('cf-ray');
+      proxyHeaders.delete('cf-ipcountry');
+      proxyHeaders.delete('cf-visitor');
+      proxyHeaders.delete('x-forwarded-for');
+      proxyHeaders.delete('x-forwarded-proto');
+      proxyHeaders.delete('x-real-ip');
+      proxyHeaders.delete('true-client-ip');
+      
+      // 2. Manage internal cookies and Host
+      proxyHeaders.delete('Host');
+      proxyHeaders.delete('Cookie'); // Real implementation would maintain a cookie jar per session
+
+      // 3. Ensure a highly realistic standard User-Agent and Sec-Ch-Ua
+      const ua = proxyHeaders.get('User-Agent') || '';
+      if (!ua || ua.includes('Cloudflare') || ua.includes('curl') || ua.includes('node') || ua.includes('Workers')) {
+          // Standardize on a highly typical Windows Chrome UA
           proxyHeaders.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+          proxyHeaders.set('sec-ch-ua', '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"');
+          proxyHeaders.set('sec-ch-ua-mobile', '?0');
+          proxyHeaders.set('sec-ch-ua-platform', '"Windows"');
       }
 
-      // Ensure we get uncompressed data if we need to rewrite HTML/JS
-      // For now we don't fully implement HTMLRewriter, so we just proxy.
-      // A full Enterprise Gateway would instantiate HtmlRewriterPlugin here.
-      proxyHeaders.set('Accept-Encoding', 'identity');
+      // 4. Force standard Accept encodings
+      // Note: We use 'identity' for now to allow local HTML rewriting if needed. 
+      // In ultimate mode, we pass 'gzip, deflate, br' and decompress in the worker.
+      proxyHeaders.set('Accept-Encoding', 'gzip, deflate, br');
 
+      // 5. Spoof origin and referer to make it look like direct navigation if missing
+      if (!proxyHeaders.has('Referer')) {
+          proxyHeaders.set('Referer', targetUrl.origin + '/');
+      }
+      
+      // Initialize upstream request
       const proxyRequest = new Request(targetUrl.toString(), {
         method: ctx.request.method,
         headers: proxyHeaders,
