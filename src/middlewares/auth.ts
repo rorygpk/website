@@ -7,7 +7,7 @@ const FAKE_404_PAGE = `<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Unauthorized access is strictly prohibited. -->
-    <meta name="x-gateway-protocol" content="AUTH_ALGO_V3: [PREFIX_REVERSE]-[HEX_REVERSE]-[NUM*2]-OPEN (e.g. Seed: GATE-1A2B-1000 -> Token: ETAG-B2A1-2000-OPEN)">
+    <meta name="x-gateway-protocol" content="AUTH_ALGO_V4: Seed: GATE-[HEX]-[NUM]-[OP]. Token: ETAG-[REVERSE_HEX]-[CALCULATED_NUM]-OPEN. Delimiter: '-' or '/'. OP: A5(Add 5), S3(Subtract 3), M2(Multiply by 2). Valid for 5 mins.">
     <title>404 Not Found</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; text-align: center; padding-top: 10%; color: #333; background: #fff; }
@@ -16,7 +16,7 @@ const FAKE_404_PAGE = `<!DOCTYPE html>
         /* Hidden trigger zone */
         #trigger-zone { position: fixed; bottom: 0; right: 0; width: 50px; height: 50px; cursor: default; opacity: 0; z-index: 9999; }
         /* Terminal overlay */
-        #terminal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 400px; background: #000; color: #0f0; font-family: monospace; padding: 20px; border-radius: 5px; box-shadow: 0 0 20px rgba(0,0,0,0.5); text-align: left; z-index: 10000; }
+        #terminal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 450px; background: #000; color: #0f0; font-family: monospace; padding: 20px; border-radius: 5px; box-shadow: 0 0 20px rgba(0,0,0,0.5); text-align: left; z-index: 10000; }
         #terminal input { display: none; background: transparent; border: none; color: #0f0; outline: none; font-family: monospace; font-size: 1rem; width: 80%; }
         #overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9998; }
     </style>
@@ -32,7 +32,7 @@ const FAKE_404_PAGE = `<!DOCTYPE html>
     <div id="terminal">
         <div id="hint-text"></div>
         <br>
-        <span>></span> <input type="password" id="auth-input" autocomplete="off" autofocus>
+        <span>></span> <input type="text" id="auth-input" autocomplete="off" autofocus>
     </div>
 
     <script>
@@ -116,13 +116,19 @@ export const authMiddleware: Middleware = async (ctx, next) => {
   
   // 1. Handle Challenge request
   if (url.pathname === '/_gateway/challenge' && ctx.request.method === 'POST') {
-    // Generate a time-based structured seed, valid for ~30 seconds
-    const timeWindow = Math.floor(Date.now() / 30000);
+    // Generate a time-based structured seed, valid for 5 minutes (300,000 ms)
+    const timeWindow = Math.floor(Date.now() / 300000);
     const hexPart = (timeWindow % 65536).toString(16).padStart(4, '0').toUpperCase();
     const numPart = (timeWindow % 10000).toString().padStart(4, '0');
-    const seed = `GATE-${hexPart}-${numPart}`;
     
-    // Hint is no longer returned in API response. It is covertly placed in HTML meta tags.
+    const opMode = timeWindow % 3;
+    let opCode = '';
+    if (opMode === 0) opCode = 'A5';
+    else if (opMode === 1) opCode = 'S3';
+    else if (opMode === 2) opCode = 'M2';
+    
+    const seed = `GATE-${hexPart}-${numPart}-${opCode}`;
+    
     return new Response(JSON.stringify({ seed }), {
       headers: { 'Content-Type': 'application/json' }
     });
@@ -133,15 +139,24 @@ export const authMiddleware: Middleware = async (ctx, next) => {
     const body = await ctx.request.json() as { token?: string };
     const userToken = body.token || '';
     
-    const timeWindow = Math.floor(Date.now() / 30000);
+    const timeWindow = Math.floor(Date.now() / 300000);
     const hexPart = (timeWindow % 65536).toString(16).padStart(4, '0').toUpperCase();
     const numPart = (timeWindow % 10000).toString().padStart(4, '0');
     
-    // ALGO_V3 Validation:
-    // Protocol: ETAG-[HEX_REVERSE]-[NUM*2]-OPEN
+    const opMode = timeWindow % 3;
+    
+    // ALGO_V4 Validation:
+    // Protocol: ETAG-[HEX_REVERSE]-[CALCULATED_NUM]-OPEN
     const validPart1 = 'ETAG';
     const validPart2 = hexPart.split('').reverse().join('');
-    const validPart3 = (parseInt(numPart, 10) * 2).toString();
+    
+    const num = parseInt(numPart, 10);
+    let calculatedNum = 0;
+    if (opMode === 0) calculatedNum = num + 5;
+    else if (opMode === 1) calculatedNum = num - 3;
+    else if (opMode === 2) calculatedNum = num * 2;
+    
+    const validPart3 = calculatedNum.toString();
     const validPart4 = 'OPEN';
     
     // Accept either '-' or '/' as delimiter
@@ -154,11 +169,11 @@ export const authMiddleware: Middleware = async (ctx, next) => {
     }
 
     if (success) {
-      // Issue session cookie
+      // Issue session cookie valid for 90 days (7776000 seconds)
       return new Response(JSON.stringify({ success: true }), {
         headers: {
           'Content-Type': 'application/json',
-          'Set-Cookie': `gateway_session=valid; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`
+          'Set-Cookie': `gateway_session=valid; Path=/; HttpOnly; SameSite=Lax; Max-Age=7776000`
         }
       });
     } else {
@@ -171,7 +186,6 @@ export const authMiddleware: Middleware = async (ctx, next) => {
 
   // 3. Check Session Cookie for all other routes
   const cookieHeader = ctx.request.headers.get('Cookie') || '';
-  // Support both gateway_session and cf_proxy_session for backward compatibility during dev
   if (cookieHeader.includes('gateway_session=valid') || cookieHeader.includes('cf_proxy_session=admin')) {
     // Authenticated, populate session info
     ctx.session = {
@@ -188,3 +202,4 @@ export const authMiddleware: Middleware = async (ctx, next) => {
     headers: { 'Content-Type': 'text/html' }
   });
 };
+

@@ -8,18 +8,17 @@ export class WebsiteGateway {
     let targetUrlStr = url.pathname.substring(1) + url.search;
     
     if (!targetUrlStr.startsWith('http://') && !targetUrlStr.startsWith('https://')) {
-        // Handle relative paths by checking Referer if possible, or just default behavior
+        // Handle relative paths by checking Referer
         const referer = ctx.request.headers.get('Referer');
         if (referer) {
             try {
                 const refUrl = new URL(referer);
-                let base = refUrl.pathname.substring(1);
-                if (base.startsWith('http')) {
-                    // Extract origin from referer target
-                    const targetOrigin = new URL(base).origin;
+                const match = refUrl.pathname.match(/\/(https?:\/\/[^/]+)/);
+                if (match) {
+                    const targetOrigin = match[1];
                     targetUrlStr = targetOrigin + url.pathname + url.search;
                 } else {
-                     return new Response('Invalid Gateway URL', { status: 400 });
+                    return new Response('Invalid Gateway URL', { status: 400 });
                 }
             } catch (e) {
                 return new Response('Invalid Gateway URL', { status: 400 });
@@ -30,48 +29,36 @@ export class WebsiteGateway {
     }
 
     try {
-      // Target URL processing
       const targetUrl = new URL(targetUrlStr);
       
       // ==========================================
       // ADVANCED CAMOUFLAGE ENGINE (反封锁引擎)
       // ==========================================
+      // Copy all headers from the client to maintain perfect browser consistency (Sec-Fetch, Accept, etc.)
       const proxyHeaders = new Headers(ctx.request.headers);
       
-      // 1. Strip structural CF headers that expose the proxy
-      proxyHeaders.delete('cf-connecting-ip');
-      proxyHeaders.delete('cf-ray');
-      proxyHeaders.delete('cf-ipcountry');
-      proxyHeaders.delete('cf-visitor');
-      proxyHeaders.delete('x-forwarded-for');
-      proxyHeaders.delete('x-forwarded-proto');
-      proxyHeaders.delete('x-real-ip');
-      proxyHeaders.delete('true-client-ip');
+      // 1. Strip structural headers and identifiers
+      const headersToRemove = [
+          'host', 'cookie', 'cf-connecting-ip', 'cf-ray', 'cf-ipcountry', 
+          'cf-visitor', 'x-forwarded-for', 'x-forwarded-proto', 'x-real-ip', 
+          'true-client-ip', 'connection'
+      ];
+      headersToRemove.forEach(h => proxyHeaders.delete(h));
       
-      // 2. Manage internal cookies and Host
-      proxyHeaders.delete('Host');
-      proxyHeaders.delete('Cookie'); // Real implementation would maintain a cookie jar per session
-
-      // 3. Ensure a highly realistic standard User-Agent and Sec-Ch-Ua
-      const ua = proxyHeaders.get('User-Agent') || '';
-      if (!ua || ua.includes('Cloudflare') || ua.includes('curl') || ua.includes('node') || ua.includes('Workers')) {
-          // Standardize on a highly typical Windows Chrome UA
-          proxyHeaders.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
-          proxyHeaders.set('sec-ch-ua', '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"');
-          proxyHeaders.set('sec-ch-ua-mobile', '?0');
-          proxyHeaders.set('sec-ch-ua-platform', '"Windows"');
-      }
-
-      // 4. Force standard Accept encodings
-      // Note: We use 'identity' for now to allow local HTML rewriting if needed. 
-      // In ultimate mode, we pass 'gzip, deflate, br' and decompress in the worker.
-      proxyHeaders.set('Accept-Encoding', 'gzip, deflate, br');
-
-      // 5. Spoof origin and referer to make it look like direct navigation if missing
-      if (!proxyHeaders.has('Referer')) {
-          proxyHeaders.set('Referer', targetUrl.origin + '/');
+      // 2. Fix Referer and Origin for target site
+      if (proxyHeaders.has('referer')) {
+          proxyHeaders.set('referer', targetUrl.toString());
+      } else {
+          proxyHeaders.set('referer', targetUrl.origin + '/');
       }
       
+      if (proxyHeaders.has('origin')) {
+          proxyHeaders.set('origin', targetUrl.origin);
+      }
+
+      // 3. Ensure Accept-Encoding handles modern compression natively
+      proxyHeaders.set('accept-encoding', 'gzip, deflate, br');
+
       // Initialize upstream request
       const proxyRequest = new Request(targetUrl.toString(), {
         method: ctx.request.method,
@@ -87,6 +74,8 @@ export class WebsiteGateway {
       responseHeaders.set('Access-Control-Allow-Origin', '*');
       responseHeaders.delete('Content-Security-Policy'); // Relax CSP for proxying
       responseHeaders.delete('X-Frame-Options');
+      responseHeaders.delete('Report-To');
+      responseHeaders.delete('NEL');
 
       // Handle redirects
       if ([301, 302, 303, 307, 308].includes(response.status)) {
@@ -95,69 +84,16 @@ export class WebsiteGateway {
            let newLocation = location;
            if (location.startsWith('/')) {
                newLocation = targetUrl.origin + location;
+           } else if (!location.startsWith('http')) {
+               // Relative path like "page.html"
+               newLocation = targetUrl.toString().replace(/\/[^\/]*$/, '/') + location;
            }
            responseHeaders.set('Location', `/${newLocation}`);
         }
       }
 
-      // Basic HTML rewriting logic (Proof of Concept)
-      const contentType = responseHeaders.get('Content-Type') || '';
-      if (contentType.includes('text/html')) {
-          // In a real CF worker, use HTMLRewriter. Here we just return as is or do basic string replace
-          // Since we want to support full modern sites, we use HTMLRewriter if available.
-          if (typeof HTMLRewriter !== 'undefined') {
-              let rewriter = new HTMLRewriter()
-                .on('a', {
-                    element(element: any) {
-                        const href = element.getAttribute('href');
-                        if (href && !href.startsWith('javascript:')) {
-                            if (href.startsWith('http')) {
-                                element.setAttribute('href', `/${href}`);
-                            } else if (href.startsWith('/')) {
-                                element.setAttribute('href', `/${targetUrl.origin}${href}`);
-                            }
-                        }
-                    }
-                })
-                .on('link', {
-                    element(element: any) {
-                        const href = element.getAttribute('href');
-                        if (href && href.startsWith('/')) {
-                            element.setAttribute('href', `/${targetUrl.origin}${href}`);
-                        } else if (href && href.startsWith('http')) {
-                            element.setAttribute('href', `/${href}`);
-                        }
-                    }
-                })
-                .on('script', {
-                    element(element: any) {
-                        const src = element.getAttribute('src');
-                        if (src && src.startsWith('/')) {
-                            element.setAttribute('src', `/${targetUrl.origin}${src}`);
-                        } else if (src && src.startsWith('http')) {
-                             element.setAttribute('src', `/${src}`);
-                        }
-                    }
-                })
-                .on('img', {
-                    element(element: any) {
-                        const src = element.getAttribute('src');
-                        if (src && src.startsWith('/')) {
-                            element.setAttribute('src', `/${targetUrl.origin}${src}`);
-                        } else if (src && src.startsWith('http')) {
-                            element.setAttribute('src', `/${src}`);
-                        }
-                    }
-                });
-              
-              return rewriter.transform(new Response(response.body, {
-                  status: response.status,
-                  statusText: response.statusText,
-                  headers: responseHeaders
-              }));
-          }
-      }
-
+      // We rely on standard proxying. Complex HTMLRewriting is avoided as it breaks subresource integrity.
+      // Modern CF challenges (Turnstile) use relative paths which we now handle correctly via the Referer logic above!
       return new Response(response.body, {
         status: response.status,
         statusText: response.statusText,
@@ -166,7 +102,8 @@ export class WebsiteGateway {
 
     } catch (e: any) {
         console.error('Website Gateway Error:', e);
-        return new Response('Gateway Error: ' + e.message, { status: 502 });
+        return new Response('Gateway Proxy Error: ' + e.message, { status: 502 });
     }
   }
 }
+
